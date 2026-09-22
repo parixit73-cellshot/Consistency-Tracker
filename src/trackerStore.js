@@ -25,6 +25,7 @@ export const INITIAL_HABITS = [
   { id: 'diet', label: 'DIET', color: 'bg-emerald-400', hex: '#34d399', data: [1, 1, 1, 0, 1, 0, 0] }
 ];
 
+// MATRIX: 0 = Empty, 1 = Completed/Frozen, 2 = Active Today
 export const INITIAL_TASKS = [
   {
     id: 'col-1',
@@ -32,7 +33,7 @@ export const INITIAL_TASKS = [
     colorClass: 'bg-emerald-400',
     hex: '#34d399',
     streak: 3,
-    segments: [{ start: 1, days: 2 }],
+    matrix: [0, 1, 1, 0, 0, 0, 0], // Mon-Tue completed
   },
   {
     id: 'col-2',
@@ -40,7 +41,7 @@ export const INITIAL_TASKS = [
     colorClass: 'bg-indigo-400',
     hex: '#818cf8',
     streak: 0,
-    segments: [],
+    matrix: [0, 0, 0, 0, 0, 0, 0], // Clean track
   },
   {
     id: 'col-3',
@@ -48,7 +49,7 @@ export const INITIAL_TASKS = [
     colorClass: 'bg-amber-400',
     hex: '#fbbf24',
     streak: 5,
-    segments: [{ start: 3, days: 2, isTodayActive: true }],
+    matrix: [0, 0, 0, 1, 2, 0, 0], // Wed completed, Thu active
   },
 ];
 
@@ -59,7 +60,79 @@ export const TASK_COLORS = [
   { class: 'bg-orange-400', hex: '#fb923c' }
 ];
 
-// --- CORE APPLICATION LOGIC ENGINES ---
+// --- DERIVATION ENGINE: Parses Matrix into Blocks & Umbilicals ---
+export function parseTaskMatrix(task) {
+  const blocks = [];
+  let blockStart = null;
+  let blockLen = 0;
+  let hasActive = false;
+
+  for (let i = 0; i < task.matrix.length; i++) {
+    const val = task.matrix[i];
+    if (val > 0) {
+      if (blockStart === null) blockStart = i;
+      blockLen++;
+      if (val === 2) hasActive = true;
+    } else {
+      if (blockStart !== null) {
+        blocks.push({ start: blockStart, days: blockLen, isActive: hasActive });
+        blockStart = null;
+        blockLen = 0;
+        hasActive = false;
+      }
+    }
+  }
+  if (blockStart !== null) {
+    blocks.push({ start: blockStart, days: blockLen, isActive: hasActive });
+  }
+
+  // Derive cords
+  const cords = [];
+  if (blocks.length > 0) {
+    // Umbilical from previous week streak
+    if (task.streak > 0) {
+      cords.push({ startY: 0, endY: blocks[0].start });
+    }
+    // Gaps between segments within the current week
+    for (let b = 0; b < blocks.length - 1; b++) {
+      const prevEnd = blocks[b].start + blocks[b].days;
+      const nextStart = blocks[b + 1].start;
+      if (nextStart > prevEnd) {
+        cords.push({ startY: prevEnd, endY: nextStart });
+      }
+    }
+  } else if (task.streak > 0) {
+    // Has a streak but no blocks yet this week
+    cords.push({ startY: 0, endY: CURRENT_DAY_INDEX });
+  }
+
+  return { blocks, cords };
+}
+
+// --- MATRIX ACTION ENGINES ---
+export function executeMatrixAction(tasks, taskId, action) {
+  return tasks.map((task) => {
+    if (task.id !== taskId) return task;
+
+    const nextMatrix = [...task.matrix];
+    const todayVal = nextMatrix[CURRENT_DAY_INDEX];
+
+    if (action === 'START') {
+      if (todayVal === 0) {
+        nextMatrix[CURRENT_DAY_INDEX] = 2; // Set active today
+      }
+    } else if (action === 'STOP') {
+      if (todayVal === 2) {
+        nextMatrix[CURRENT_DAY_INDEX] = 1; // Freeze/stop today
+      }
+    } else if (action === 'UNDO') {
+      // Clear today back to empty regardless of whether it was active or stopped
+      nextMatrix[CURRENT_DAY_INDEX] = 0;
+    }
+
+    return { ...task, matrix: nextMatrix };
+  });
+}
 
 export function toggleHabitToday(habits, habitId, dayIndex) {
   if (dayIndex !== CURRENT_DAY_INDEX) return habits;
@@ -71,44 +144,17 @@ export function toggleHabitToday(habits, habitId, dayIndex) {
     return { ...h, data: nextData };
   });
 }
+export function reconcileDayRollover(tasks, previousDayIndex, newDayIndex) {
+  if (previousDayIndex >= newDayIndex) return tasks;
 
-export function toggleTaskToday(tasks, taskId) {
   return tasks.map((task) => {
-    if (task.id !== taskId) return task;
-
-    const activeSegIdx = task.segments.findIndex(
-      (s) => s.isTodayActive || (s.start <= CURRENT_DAY_INDEX && s.start + s.days > CURRENT_DAY_INDEX)
-    );
-
-    if (activeSegIdx !== -1) {
-      const seg = task.segments[activeSegIdx];
-      // Past day start (e.g. Wednesday): trim to freeze past time
-      if (seg.start < CURRENT_DAY_INDEX) {
-        const pastDays = CURRENT_DAY_INDEX - seg.start;
-        const updated = [...task.segments];
-        updated[activeSegIdx] = {
-          start: seg.start,
-          days: pastDays,
-          isTodayActive: false,
-        };
-        return { ...task, segments: updated };
-      }
-
-      // Started today: remove today's block
-      return {
-        ...task,
-        segments: task.segments.filter((_, idx) => idx !== activeSegIdx),
-      };
+    const nextMatrix = [...task.matrix];
+    // If yesterday was left running (state 2), freeze it into completed history (state 1)
+    if (nextMatrix[previousDayIndex] === 2) {
+      nextMatrix[previousDayIndex] = 1;
     }
-
-    // Inactive on Thursday: append a segment for today
-    return {
-      ...task,
-      segments: [
-        ...task.segments,
-        { start: CURRENT_DAY_INDEX, days: 1, isTodayActive: true },
-      ],
-    };
+    // New day begins empty (state 0) by default
+    return { ...task, matrix: nextMatrix };
   });
 }
 
@@ -122,7 +168,7 @@ export function createNewTask(tasks, title) {
       colorClass: colorObj.class,
       hex: colorObj.hex,
       streak: 0,
-      segments: [],
+      matrix: [0, 0, 0, 0, 0, 0, 0],
     },
   ];
 }
