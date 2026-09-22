@@ -15,17 +15,19 @@ export const TIMELINE_DAYS = Array.from({ length: 28 }, (_, i) => {
   const dayNum = 6 + i;
   const dateStr = `${String(dayNum).padStart(2, '0')}/09`;
   const weekNum = 37 + Math.floor(i / 7);
+  const isSunday = i % 7 === 0;
   return {
     dayIndex: i,
     dayName: DAY_NAMES[i % 7],
     dateStr,
     weekNum,
+    isSunday,
   };
 });
 
-// Storage Keys
-const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v2';
-const STORAGE_HABITS_KEY = 'flow_tracker_habits_v2';
+const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v3';
+const STORAGE_HABITS_KEY = 'flow_tracker_habits_v3';
+const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_v3';
 
 export const INITIAL_HABITS = [
   { 
@@ -49,7 +51,7 @@ export const INITIAL_TASKS = [
     hex: '#34d399',
     streak: 3,
     isArchived: false,
-    nameHistory: [{ title: '2D Animation', at: 'Init' }],
+    nameHistory: [{ title: '2D Animation', at: '2026-09-06' }],
     matrix: [
       0, 1, 1, 1, 0, 0, 0,
       0, 1, 1, 1, 0, 0, 0,
@@ -63,7 +65,7 @@ export const INITIAL_TASKS = [
     hex: '#818cf8',
     streak: 0,
     isArchived: false,
-    nameHistory: [{ title: 'Motor Design', at: 'Init' }],
+    nameHistory: [{ title: 'Motor Design', at: '2026-09-06' }],
     matrix: new Array(28).fill(0),
   },
   {
@@ -72,7 +74,10 @@ export const INITIAL_TASKS = [
     hex: '#fbbf24',
     streak: 5,
     isArchived: false,
-    nameHistory: [{ title: '3D Modeling', at: '2026-09-10' }, { title: '3D Animation', at: '2026-09-15' }],
+    nameHistory: [
+      { title: '3D Modeling', at: '2026-09-08' },
+      { title: '3D Animation', at: '2026-09-14' }
+    ],
     matrix: [
       1, 1, 0, 0, 1, 1, 0,
       1, 1, 0, 0, 1, 1, 0,
@@ -82,13 +87,12 @@ export const INITIAL_TASKS = [
   },
 ];
 
-// Local Storage Loaders
 export function loadPersistedTasks() {
   try {
     const saved = localStorage.getItem(STORAGE_TASKS_KEY);
     if (saved) return JSON.parse(saved);
   } catch (e) {
-    console.error('Failed to load persisted tasks', e);
+    console.error(e);
   }
   return INITIAL_TASKS;
 }
@@ -98,21 +102,33 @@ export function loadPersistedHabits() {
     const saved = localStorage.getItem(STORAGE_HABITS_KEY);
     if (saved) return JSON.parse(saved);
   } catch (e) {
-    console.error('Failed to load persisted habits', e);
+    console.error(e);
   }
   return INITIAL_HABITS;
 }
 
-export function persistState(tasks, habits) {
+export function loadPersistedRevisions() {
+  try {
+    const saved = localStorage.getItem(STORAGE_REVISIONS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error(e);
+  }
+  return [];
+}
+
+export function persistState(tasks, habits, revisions = []) {
   try {
     localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(tasks));
     localStorage.setItem(STORAGE_HABITS_KEY, JSON.stringify(habits));
+    if (revisions.length) {
+      localStorage.setItem(STORAGE_REVISIONS_KEY, JSON.stringify(revisions.slice(-20))); // Keep last 20 snapshots
+    }
   } catch (e) {
     console.error('Persistence failed', e);
   }
 }
 
-// Data Parsing Engine
 export function parseHabitBlocks(habitData) {
   const blocks = [];
   let start = null;
@@ -226,7 +242,6 @@ export function toggleHabitToday(habits, habitId, dayIndex, currentDay) {
   });
 }
 
-// Renaming with historical audit log
 export function renameTask(tasks, taskId, newTitle) {
   const trimmed = newTitle.trim();
   return tasks.map((t) => {
@@ -240,10 +255,13 @@ export function renameTask(tasks, taskId, newTitle) {
   });
 }
 
-// Insertion & Vault Restorations
+export function updateTaskColor(tasks, taskId, newHex) {
+  return tasks.map((t) => (t.id === taskId ? { ...t, hex: newHex } : t));
+}
+
 export function insertNewTask(tasks, { title, hex, position }, totalDays) {
   const newTask = {
-    id: `col-${Date.now()}`,
+    id: `col-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     title: title.trim().substring(0, 16),
     hex: hex || '#34d399',
     streak: 0,
@@ -260,7 +278,7 @@ export function insertNewTask(tasks, { title, hex, position }, totalDays) {
 
 export function insertNewHabit(habits, { label, hex, position }, totalDays) {
   const newHabit = {
-    id: `habit-${Date.now()}`,
+    id: `habit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     label: label.trim().substring(0, 5).toUpperCase(),
     hex: hex || '#22d3ee',
     data: new Array(totalDays).fill(0),

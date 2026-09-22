@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, 
-  Trash2, X, Archive, Download, Upload, ShieldAlert, RefreshCw, History 
+  Trash2, X, Archive, Download, Upload, RefreshCw, History, Palette, Layers
 } from 'lucide-react';
 import {
   ROW_HEIGHT,
@@ -12,6 +12,7 @@ import {
   TIMELINE_DAYS,
   loadPersistedTasks,
   loadPersistedHabits,
+  loadPersistedRevisions,
   persistState,
   getColLeft,
   parseHabitBlocks,
@@ -20,6 +21,7 @@ import {
   shiftCurrentDay,
   toggleHabitToday,
   renameTask,
+  updateTaskColor,
   insertNewTask,
   insertNewHabit,
 } from './trackerStore';
@@ -36,10 +38,12 @@ function StaticGridWires({ currentDay }) {
           <div 
             className={`w-full border-b ${
               d.dayIndex === currentDay 
-                ? 'border-white/20 shadow-[0_0_8px_rgba(255,255,255,0.15)]' 
-                : d.dayIndex % 7 === 0 
-                  ? 'border-white/15' 
-                  : 'border-white/5'
+                ? 'border-white/25 shadow-[0_0_8px_rgba(255,255,255,0.15)]' 
+                : d.isSunday 
+                  ? 'border-amber-400/20 bg-amber-400/[0.01]' 
+                  : d.dayIndex % 7 === 0 
+                    ? 'border-white/15' 
+                    : 'border-white/5'
             }`} 
           />
         </div>
@@ -114,10 +118,11 @@ function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask, currentDay }) 
 export default function App() {
   const [tasks, setTasks] = useState(loadPersistedTasks);
   const [habits, setHabits] = useState(loadPersistedHabits);
+  const [revisions, setRevisions] = useState(loadPersistedRevisions);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [currentDay, setCurrentDay] = useState(BASE_CURRENT_DAY_INDEX);
 
-  // Modals & Panels
+  // Modals & Drawers
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: '', hex: '#34d399', position: 1 });
 
@@ -125,6 +130,11 @@ export default function App() {
   const [habitForm, setHabitForm] = useState({ label: '', hex: '#22d3ee', position: 1 });
 
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [historyModalTask, setHistoryModalTask] = useState(null);
+  const [revisionsModalOpen, setRevisionsModalOpen] = useState(false);
+  const [importConfirmData, setImportConfirmData] = useState(null);
+
+  // Hard Purge confirmation
   const [purgeConfirmId, setPurgeConfirmId] = useState(null);
   const [purgeInputText, setPurgeInputText] = useState('');
 
@@ -135,10 +145,21 @@ export default function App() {
   const scrollContainerRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Real-time State Auto-Sync
+  // Take Snapshot before mutating
+  const snapshotState = (reason = 'Manual Change') => {
+    const snap = {
+      id: `rev-${Date.now()}`,
+      at: new Date().toLocaleTimeString(),
+      reason,
+      tasks: JSON.parse(JSON.stringify(tasks)),
+      habits: JSON.parse(JSON.stringify(habits)),
+    };
+    setRevisions((prev) => [snap, ...prev.slice(0, 19)]);
+  };
+
   useEffect(() => {
-    persistState(tasks, habits);
-  }, [tasks, habits]);
+    persistState(tasks, habits, revisions);
+  }, [tasks, habits, revisions]);
 
   const centerCurrentWeek = (smooth = true) => {
     if (!scrollContainerRef.current) return;
@@ -154,7 +175,6 @@ export default function App() {
     centerCurrentWeek(false);
   }, []);
 
-  // Filter Active vs Archived Tasks
   const activeTasks = tasks.filter((t) => !t.isArchived);
   const archivedTasks = tasks.filter((t) => t.isArchived);
 
@@ -167,6 +187,7 @@ export default function App() {
   const handleCreateTask = (e) => {
     e.preventDefault();
     if (!taskForm.title.trim()) return;
+    snapshotState(`Spawn Task: ${taskForm.title}`);
     setTasks((prev) =>
       insertNewTask(
         prev,
@@ -181,20 +202,21 @@ export default function App() {
     setTaskModalOpen(false);
   };
 
-  // Safe Deletion: Move to Vault
   const handleArchiveTask = (taskId) => {
+    snapshotState('Archive Task');
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isArchived: true } : t)));
     if (selectedTaskId === taskId) setSelectedTaskId(null);
   };
 
-  // Safe Restoration: Respawn from Vault
   const handleRestoreTask = (taskId) => {
+    snapshotState('Respawn Task from Vault');
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isArchived: false } : t)));
   };
 
-  // Hard Delete: Purge with typed confirmation
+  // Case-Insensitive Hard Purge
   const handleHardPurgeTask = (taskId) => {
-    if (purgeInputText !== 'DELETE') return;
+    if (purgeInputText.trim().toUpperCase() !== 'DELETE') return;
+    snapshotState('Purge Task Permanently');
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setPurgeConfirmId(null);
     setPurgeInputText('');
@@ -208,6 +230,7 @@ export default function App() {
   const handleCreateHabit = (e) => {
     e.preventDefault();
     if (!habitForm.label.trim()) return;
+    snapshotState(`Spawn Habit: ${habitForm.label}`);
     setHabits((prev) =>
       insertNewHabit(
         prev,
@@ -224,6 +247,7 @@ export default function App() {
 
   const handleDeleteHabit = (e, habitId) => {
     e.stopPropagation();
+    snapshotState('Delete Habit');
     setHabits((prev) => prev.filter((h) => h.id !== habitId));
   };
 
@@ -247,6 +271,10 @@ export default function App() {
     setEditingItemId(null);
   };
 
+  const handleColorChange = (taskId, newHex) => {
+    setTasks((prev) => updateTaskColor(prev, taskId, newHex));
+  };
+
   const handleAction = (action) => {
     if (!selectedTaskId) return;
     setTasks((prev) => executeMatrixAction(prev, selectedTaskId, action, currentDay));
@@ -260,7 +288,49 @@ export default function App() {
     }
   };
 
-  // Full Backup Export / Import
+  // Safe JSON Import Flow
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (parsed.tasks && parsed.habits) {
+          setImportConfirmData(parsed);
+        }
+      } catch (err) {
+        console.error('Invalid JSON file', err);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const applyImportChoice = (mode) => {
+    if (!importConfirmData) return;
+    snapshotState(`Import Backup (${mode})`);
+
+    if (mode === 'merge') {
+      // Append imported tasks alongside current ones without id collisions
+      const importedTasksWithNewIds = importConfirmData.tasks.map((t) => ({
+        ...t,
+        id: `imp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      }));
+      setTasks((prev) => [...prev, ...importedTasksWithNewIds]);
+    } else if (mode === 'vault_current') {
+      // Move current to vault, load imported to canvas
+      const vaultedCurrent = tasks.map((t) => ({ ...t, isArchived: true }));
+      setTasks([...vaultedCurrent, ...importConfirmData.tasks]);
+      setHabits(importConfirmData.habits);
+    } else if (mode === 'overwrite') {
+      setTasks(importConfirmData.tasks);
+      setHabits(importConfirmData.habits);
+    }
+    setImportConfirmData(null);
+  };
+
   const handleExportBackup = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ tasks, habits }));
     const downloadAnchor = document.createElement('a');
@@ -271,22 +341,11 @@ export default function App() {
     downloadAnchor.remove();
   };
 
-  const handleImportBackup = (e) => {
-    const fileReader = new FileReader();
-    fileReader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target.result);
-        if (parsed.tasks && parsed.habits) {
-          setTasks(parsed.tasks);
-          setHabits(parsed.habits);
-        }
-      } catch (err) {
-        console.error('Invalid backup JSON', err);
-      }
-    };
-    if (e.target.files[0]) {
-      fileReader.readAsText(e.target.files[0]);
-    }
+  const handleRollback = (rev) => {
+    snapshotState('Rollback to Snapshot');
+    setTasks(rev.tasks);
+    setHabits(rev.habits);
+    setRevisionsModalOpen(false);
   };
 
   const selectedTask = activeTasks.find((t) => t.id === selectedTaskId);
@@ -304,7 +363,10 @@ export default function App() {
           <span className="text-[11px] font-black tracking-[0.2em] uppercase text-neutral-500">Sprint Board</span>
           <div className="h-4 w-[1px] bg-white/10" />
           <div className="text-[11px] text-neutral-300 font-bold tracking-widest uppercase">
-            Week {currentDayInfo.weekNum} <span className="text-neutral-600 mx-2">/</span> {currentDayInfo.dayName} {currentDayInfo.dateStr}
+            Week {currentDayInfo.weekNum} <span className="text-neutral-600 mx-2">/</span> 
+            <span className={currentDayInfo.isSunday ? 'text-amber-400 font-black' : ''}>
+              {currentDayInfo.dayName} {currentDayInfo.dateStr}
+            </span>
           </div>
         </div>
 
@@ -328,7 +390,9 @@ export default function App() {
             >
               <Rewind size={12} />
             </button>
-            <span className="text-[10px] font-bold px-1 text-white">{currentDayInfo.dateStr}</span>
+            <span className={`text-[10px] font-bold px-1 ${currentDayInfo.isSunday ? 'text-amber-400' : 'text-white'}`}>
+              {currentDayInfo.dateStr}
+            </span>
             <button 
               onClick={() => handleShiftDay(1)} 
               className="p-1 hover:bg-white/10 rounded transition-colors text-neutral-400 hover:text-white cursor-pointer"
@@ -337,28 +401,35 @@ export default function App() {
             </button>
           </div>
 
-          {/* BACKUP & RESTORE */}
+          {/* BACKUP, REVISIONS & VAULT */}
           <div className="flex items-center gap-1 border-l border-white/10 pl-3">
             <button
               onClick={handleExportBackup}
               className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              title="Export Snapshot (JSON)"
+              title="Export Full Backup (JSON)"
             >
               <Download size={14} />
             </button>
             <input 
               type="file" 
               ref={fileInputRef} 
-              onChange={handleImportBackup} 
+              onChange={handleFileSelect} 
               accept=".json" 
               className="hidden" 
             />
             <button
               onClick={() => fileInputRef.current?.click()}
               className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              title="Import Snapshot (JSON)"
+              title="Import JSON Backup (With Safety Merge Dialog)"
             >
               <Upload size={14} />
+            </button>
+            <button
+              onClick={() => setRevisionsModalOpen(true)}
+              className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              title="Snapshots & Rollbacks"
+            >
+              <Layers size={14} />
             </button>
             <button
               onClick={() => setVaultOpen(true)}
@@ -440,18 +511,25 @@ export default function App() {
             <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
           </div>
 
-          {/* Active Task Column Headers */}
+          {/* Task Column Headers */}
           <div className="flex-1 relative overflow-hidden min-w-max">
             {activeTasks.map((task, idx) => (
               <div
                 key={task.id}
                 style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
-                onDoubleClick={() => handleStartRename(task.id, task.title)}
-                title="Double click to rename"
-                className={`absolute h-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors cursor-pointer ${
+                className={`absolute h-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
                   selectedTaskId === task.id ? 'text-white' : 'text-neutral-400 hover:text-neutral-200'
                 }`}
               >
+                {/* Live color dot & quick picker */}
+                <input
+                  type="color"
+                  value={task.hex}
+                  onChange={(e) => handleColorChange(task.id, e.target.value)}
+                  className="w-3 h-3 rounded-full cursor-pointer bg-transparent border-none outline-none mr-0.5"
+                  title="Click to tweak track color"
+                />
+
                 {editingItemId === task.id ? (
                   <input
                     type="text"
@@ -461,17 +539,27 @@ export default function App() {
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={() => handleSaveRename('task', task.id)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSaveRename('task', task.id)}
-                    className="w-28 bg-black border border-white/30 rounded px-1.5 py-0.5 text-[10px] text-center text-white outline-none"
+                    className="w-24 bg-black border border-white/30 rounded px-1 text-[10px] text-center text-white outline-none"
                   />
                 ) : (
-                  <>
-                    <span>{task.title}</span>
-                    {task.streak > 0 && (
-                      <span className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
-                        🔥{task.streak}
-                      </span>
-                    )}
-                  </>
+                  <span onDoubleClick={() => handleStartRename(task.id, task.title)} title="Double click to rename">
+                    {task.title}
+                  </span>
+                )}
+
+                {/* Name History Icon */}
+                <button
+                  onClick={() => setHistoryModalTask(task)}
+                  className="text-neutral-600 hover:text-neutral-300 transition-colors cursor-pointer"
+                  title="View name evolution history"
+                >
+                  <History size={11} />
+                </button>
+
+                {task.streak > 0 && (
+                  <span className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
+                    🔥{task.streak}
+                  </span>
                 )}
               </div>
             ))}
@@ -534,7 +622,7 @@ export default function App() {
             })}
           </div>
 
-          {/* Dates Column */}
+          {/* Dates Column: Yellow Marked Sundays */}
           <div className="w-28 border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative shadow-[10px_0_20px_rgba(0,0,0,0.4)]" style={{ height: `${totalStreamHeight}px` }}>
             {TIMELINE_DAYS.map((d) => (
               <div 
@@ -544,13 +632,25 @@ export default function App() {
               >
                 <div
                   className={`w-full py-2 px-2 rounded flex flex-col items-center justify-center border transition-all ${
-                    d.dayIndex === currentDay ? 'border-white/20 bg-white/10 shadow-sm' : 'border-transparent'
+                    d.dayIndex === currentDay 
+                      ? 'border-white/20 bg-white/10 shadow-sm' 
+                      : d.isSunday 
+                        ? 'border-amber-400/30 bg-amber-400/10 shadow-[0_0_12px_rgba(251,191,36,0.08)]' 
+                        : 'border-transparent'
                   }`}
                 >
-                  <span className={`text-[10px] font-black ${d.dayIndex === currentDay ? 'text-white' : 'text-neutral-500'}`}>
+                  <span className={`text-[10px] font-black ${
+                    d.dayIndex === currentDay 
+                      ? 'text-white' 
+                      : d.isSunday 
+                        ? 'text-amber-400' 
+                        : 'text-neutral-500'
+                  }`}>
                     {d.dayName}
                   </span>
-                  <span className="text-[9px] font-mono text-neutral-600">{d.dateStr}</span>
+                  <span className={`text-[9px] font-mono ${d.isSunday ? 'text-amber-300/80 font-bold' : 'text-neutral-600'}`}>
+                    {d.dateStr}
+                  </span>
                 </div>
               </div>
             ))}
@@ -578,14 +678,29 @@ export default function App() {
             {selectedTask ? selectedTask.title : 'None'}
           </span>
           {selectedTask && (
-            <button
-              onClick={() => handleArchiveTask(selectedTask.id)}
-              className="flex items-center gap-1.5 ml-4 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
-              title="Archive column (Safely stores data into Vault)"
-            >
-              <Archive size={12} />
-              <span>Archive Task</span>
-            </button>
+            <div className="flex items-center gap-3 ml-4">
+              {/* Color Tweak Tool */}
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 border border-white/10">
+                <Palette size={11} className="text-neutral-400" />
+                <input
+                  type="color"
+                  value={selectedTask.hex}
+                  onChange={(e) => handleColorChange(selectedTask.id, e.target.value)}
+                  className="w-4 h-4 rounded-full cursor-pointer bg-transparent border-none outline-none"
+                  title="Modify track color"
+                />
+              </div>
+
+              {/* Archive Column Button */}
+              <button
+                onClick={() => handleArchiveTask(selectedTask.id)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
+                title="Archive column into vault"
+              >
+                <Archive size={12} />
+                <span>Archive</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -632,17 +747,14 @@ export default function App() {
       </footer>
 
       {/* ========================================================= */}
-      {/* FLOATING CARD MODAL: CREATE TASK (Free Color Wheel) */}
+      {/* MODAL: CREATE TASK */}
       {/* ========================================================= */}
       {taskModalOpen && (
         <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-black uppercase tracking-widest text-white">Create Task Column</span>
-              <button 
-                onClick={() => setTaskModalOpen(false)}
-                className="text-neutral-500 hover:text-white transition-colors cursor-pointer"
-              >
+              <button onClick={() => setTaskModalOpen(false)} className="text-neutral-500 hover:text-white transition-colors cursor-pointer">
                 <X size={16} />
               </button>
             </div>
@@ -661,9 +773,8 @@ export default function App() {
                 />
               </div>
 
-              {/* NATIVE COLOR CIRCLE PICKER */}
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Fluid Color (Free Wheel)</label>
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Fluid Color</label>
                 <div className="flex items-center gap-3 bg-[#141414] p-2 rounded-lg border border-white/10">
                   <input
                     type="color"
@@ -710,17 +821,14 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* FLOATING CARD MODAL: CREATE HABIT (Free Color Wheel) */}
+      {/* MODAL: CREATE HABIT */}
       {/* ========================================================= */}
       {habitModalOpen && (
         <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-black uppercase tracking-widest text-white">Create Habit Track</span>
-              <button 
-                onClick={() => setHabitModalOpen(false)}
-                className="text-neutral-500 hover:text-white transition-colors cursor-pointer"
-              >
+              <button onClick={() => setHabitModalOpen(false)} className="text-neutral-500 hover:text-white transition-colors cursor-pointer">
                 <X size={16} />
               </button>
             </div>
@@ -743,7 +851,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Track Color (Free Wheel)</label>
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Track Color</label>
                 <div className="flex items-center gap-3 bg-[#141414] p-2 rounded-lg border border-white/10">
                   <input
                     type="color"
@@ -790,7 +898,140 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* THE VAULT DRAWER (Soft-Deleted Tasks & Name History) */}
+      {/* MODAL: NAME HISTORY AUDIT LOG */}
+      {/* ========================================================= */}
+      {historyModalTask && (
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <History size={14} className="text-amber-400" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-white">
+                  {historyModalTask.title} — History
+                </span>
+              </div>
+              <button onClick={() => setHistoryModalTask(null)} className="text-neutral-500 hover:text-white cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2.5 max-h-64 overflow-y-auto">
+              {historyModalTask.nameHistory?.map((entry, i) => (
+                <div key={i} className="flex justify-between items-center bg-[#141414] p-2.5 rounded-lg border border-white/5">
+                  <span className="text-xs font-bold text-white uppercase">{entry.title}</span>
+                  <span className="text-[9px] font-mono text-neutral-500">{entry.at}</span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setHistoryModalTask(null)}
+              className="w-full py-2 bg-white text-black font-black uppercase text-[10px] tracking-wider rounded-lg hover:bg-neutral-200 cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: SMART IMPORT CONFIRMATION */}
+      {/* ========================================================= */}
+      {importConfirmData && (
+        <div className="absolute inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
+            <div>
+              <span className="text-xs font-black uppercase tracking-widest text-amber-400 block mb-1">Import Options</span>
+              <p className="text-xs text-neutral-300">
+                Found {importConfirmData.tasks?.length} tasks in file. Choose how to handle your current active board:
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => applyImportChoice('merge')}
+                className="w-full text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
+              >
+                <div className="text-[11px] font-bold uppercase text-white">1. Merge & Combine</div>
+                <div className="text-[10px] text-neutral-400">Keep current tasks and append imported tasks to the right.</div>
+              </button>
+
+              <button
+                onClick={() => applyImportChoice('vault_current')}
+                className="w-full text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
+              >
+                <div className="text-[11px] font-bold uppercase text-amber-400">2. Vault Current & Replace</div>
+                <div className="text-[10px] text-neutral-400">Move current active tasks to Vault, then load imported file.</div>
+              </button>
+
+              <button
+                onClick={() => applyImportChoice('overwrite')}
+                className="w-full text-left p-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
+              >
+                <div className="text-[11px] font-bold uppercase text-red-400">3. Full Overwrite</div>
+                <div className="text-[10px] text-neutral-400">Completely replace everything with the backup file.</div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setImportConfirmData(null)}
+              className="w-full py-2 border border-white/10 hover:bg-white/5 text-neutral-400 text-[10px] font-bold uppercase rounded-lg cursor-pointer"
+            >
+              Cancel Import
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: SNAPSHOTS & REVISIONS ROLLBACK */}
+      {/* ========================================================= */}
+      {revisionsModalOpen && (
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Layers size={14} className="text-cyan-400" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-white">Board Snapshots</span>
+              </div>
+              <button onClick={() => setRevisionsModalOpen(false)} className="text-neutral-500 hover:text-white cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+              {revisions.length === 0 ? (
+                <div className="text-center py-8 text-neutral-600 text-xs">No previous snapshots stored.</div>
+              ) : (
+                revisions.map((rev) => (
+                  <div key={rev.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#141414] border border-white/5">
+                    <div>
+                      <div className="text-xs font-bold text-white">{rev.reason}</div>
+                      <div className="text-[9px] text-neutral-500">{rev.at} · {rev.tasks?.length} Tasks</div>
+                    </div>
+                    <button
+                      onClick={() => handleRollback(rev)}
+                      className="px-2.5 py-1 bg-white text-black hover:bg-neutral-200 text-[9px] font-black uppercase tracking-wider rounded cursor-pointer"
+                    >
+                      Restore
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <button
+              onClick={() => setRevisionsModalOpen(false)}
+              className="w-full py-2 bg-white/5 hover:bg-white/10 text-neutral-300 font-bold uppercase text-[10px] rounded-lg cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* DRAWER: THE VAULT */}
       {/* ========================================================= */}
       {vaultOpen && (
         <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end">
@@ -825,20 +1066,6 @@ export default function App() {
                           <span className="text-[10px] text-neutral-500 font-bold">{loggedDays} Days Total</span>
                         </div>
 
-                        {/* Audit Log / Name History */}
-                        {t.nameHistory && t.nameHistory.length > 1 && (
-                          <div className="bg-black/40 p-2 rounded text-[9px] text-neutral-400 flex flex-col gap-1">
-                            <span className="font-bold text-neutral-500 flex items-center gap-1">
-                              <History size={10} /> Name History:
-                            </span>
-                            {t.nameHistory.map((h, i) => (
-                              <span key={i} className="pl-3 border-l border-white/10">
-                                • {h.title} <span className="text-neutral-600">({h.at})</span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
                         <div className="flex items-center justify-between pt-2 border-t border-white/5">
                           <button
                             onClick={() => handleRestoreTask(t.id)}
@@ -860,9 +1087,11 @@ export default function App() {
                               />
                               <button
                                 onClick={() => handleHardPurgeTask(t.id)}
-                                disabled={purgeInputText !== 'DELETE'}
+                                disabled={purgeInputText.trim().toUpperCase() !== 'DELETE'}
                                 className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-colors ${
-                                  purgeInputText === 'DELETE' ? 'bg-red-600 text-white cursor-pointer' : 'bg-red-950/40 text-red-500/40 cursor-default'
+                                  purgeInputText.trim().toUpperCase() === 'DELETE' 
+                                    ? 'bg-red-600 text-white cursor-pointer' 
+                                    : 'bg-red-950/40 text-red-500/40 cursor-default'
                                 }`}
                               >
                                 Purge
@@ -891,7 +1120,7 @@ export default function App() {
             </div>
 
             <div className="pt-4 border-t border-white/10 text-[9px] text-neutral-500 leading-relaxed">
-              Archived tasks retain all historical days, streaks, and umbilical connections. They are safely removed from the active canvas without altering coordinates.
+              Vaulted tasks keep 100% of their historical days intact. Respawning them automatically restores them to the active timeline without overwriting existing lanes.
             </div>
           </div>
         </div>
