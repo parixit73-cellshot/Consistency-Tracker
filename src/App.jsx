@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed } from 'lucide-react';
+import { Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, Trash2, X } from 'lucide-react';
 import {
   ROW_HEIGHT,
   TRACK_WIDTH,
@@ -14,10 +14,11 @@ import {
   executeMatrixAction,
   shiftCurrentDay,
   toggleHabitToday,
+  createNewHabit,
   createNewTask,
 } from './trackerStore';
 
-function StaticGridWires({ daysCount, currentDay }) {
+function StaticGridWires({ currentDay }) {
   return (
     <div className="absolute inset-0 pointer-events-none z-0">
       {TIMELINE_DAYS.map((d) => (
@@ -59,7 +60,7 @@ function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask, currentDay }) 
           >
             <div className="absolute inset-y-0 w-[1px] bg-white/5 pointer-events-none" />
 
-            {/* Umbilical Cords */}
+            {/* Derived Umbilical Cords */}
             {cords.map((cord, cIdx) => {
               const top = CANVAS_PAD_Y + cord.startY * ROW_HEIGHT;
               const height = (cord.endY - cord.startY) * ROW_HEIGHT;
@@ -116,11 +117,30 @@ export default function App() {
     centerCurrentWeek(false);
   }, []);
 
+  // --- ACTIONS ---
   const handleNewTaskPrompt = () => {
     const title = window.prompt('Enter new task name:');
     if (title && title.trim()) {
       setTasks((prev) => createNewTask(prev, title, TIMELINE_DAYS.length));
     }
+  };
+
+  const handleDeleteTask = (taskId) => {
+    if (!taskId) return;
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    if (selectedTaskId === taskId) setSelectedTaskId(null);
+  };
+
+  const handleAddHabit = () => {
+    const label = window.prompt('Enter habit label (max 4 chars, e.g. READ):');
+    if (label && label.trim()) {
+      setHabits((prev) => createNewHabit(prev, label, TIMELINE_DAYS.length));
+    }
+  };
+
+  const handleDeleteHabit = (e, habitId) => {
+    e.stopPropagation();
+    setHabits((prev) => prev.filter((h) => h.id !== habitId));
   };
 
   const handleHabitClick = (habitId, dayIndex) => {
@@ -145,6 +165,9 @@ export default function App() {
   const totalStreamHeight = CANVAS_PAD_Y + TIMELINE_DAYS.length * ROW_HEIGHT + 120;
   const currentDayInfo = TIMELINE_DAYS[currentDay];
 
+  // Dynamically calculate habit rail width to ensure fit
+  const habitRailWidth = Math.max(128, habits.length * 36 + 24);
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#070707] text-white font-mono select-none overflow-hidden">
       
@@ -159,7 +182,7 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* CENTER WEEK BUTTON */}
+          {/* CENTER CURRENT WEEK BUTTON */}
           <button
             onClick={() => centerCurrentWeek(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
@@ -169,7 +192,7 @@ export default function App() {
             <span>Focus Week</span>
           </button>
 
-          {/* TIME TRAVEL DEBUG PANEL */}
+          {/* SIMULATE DATE SHIFT */}
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
             <span className="text-[9px] font-black text-neutral-500 uppercase tracking-wider mr-1">Simulate:</span>
             <button 
@@ -189,6 +212,7 @@ export default function App() {
             </button>
           </div>
 
+          {/* NEW TASK BUTTON */}
           <button
             onClick={handleNewTaskPrompt}
             className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white text-black hover:bg-neutral-200 transition-colors text-[10px] font-black tracking-widest uppercase cursor-pointer"
@@ -204,21 +228,41 @@ export default function App() {
         
         {/* STICKY COLUMN TITLES BAR */}
         <div className="h-10 border-b border-white/5 bg-[#0a0a0a] flex shrink-0 z-30">
-          <div className="w-32 border-r border-white/5 flex items-center justify-around px-2 shrink-0">
+          
+          {/* Habits Header */}
+          <div 
+            style={{ width: `${habitRailWidth}px` }} 
+            className="border-r border-white/5 flex items-center justify-around px-2 shrink-0 relative group"
+          >
             {habits.map((h) => (
-              <span
-                key={h.id}
-                className="text-[8px] tracking-wider text-neutral-500 font-black uppercase rotate-[-45deg] origin-bottom-left -translate-y-2 translate-x-2"
-              >
-                {h.label}
-              </span>
+              <div key={h.id} className="relative group/h flex items-center justify-center">
+                <span className="text-[8px] tracking-wider text-neutral-500 group-hover/h:text-white font-black uppercase rotate-[-45deg] origin-bottom-left -translate-y-2 translate-x-2 transition-colors">
+                  {h.label}
+                </span>
+                <button
+                  onClick={(e) => handleDeleteHabit(e, h.id)}
+                  title={`Delete ${h.label}`}
+                  className="absolute -top-1 -right-2 hidden group-hover/h:flex items-center justify-center w-3 h-3 bg-red-500/80 hover:bg-red-500 text-white rounded-full cursor-pointer z-40"
+                >
+                  <X size={8} />
+                </button>
+              </div>
             ))}
+            <button
+              onClick={handleAddHabit}
+              title="Add Habit Lane"
+              className="ml-1 p-1 hover:bg-white/10 rounded text-neutral-500 hover:text-white transition-colors cursor-pointer"
+            >
+              <Plus size={12} />
+            </button>
           </div>
 
+          {/* Date Label Spacer */}
           <div className="w-28 border-r border-white/5 flex items-center justify-center shrink-0">
             <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
           </div>
 
+          {/* Task Column Headers */}
           <div className="flex-1 relative overflow-hidden min-w-max">
             {tasks.map((task, idx) => (
               <div
@@ -245,7 +289,10 @@ export default function App() {
           className="flex-1 overflow-y-auto overflow-x-hidden flex relative bg-[#050505] no-scrollbar"
         >
           {/* Habit Rails */}
-          <div className="w-32 border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative" style={{ height: `${totalStreamHeight}px` }}>
+          <div 
+            style={{ width: `${habitRailWidth}px`, height: `${totalStreamHeight}px` }} 
+            className="border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative"
+          >
             {TIMELINE_DAYS.map((d) => (
               <div 
                 key={d.dayIndex} 
@@ -300,7 +347,7 @@ export default function App() {
 
           {/* Main Continuous Canvas */}
           <div className="flex-1 relative min-w-max" style={{ height: `${totalStreamHeight}px` }}>
-            <StaticGridWires daysCount={TIMELINE_DAYS.length} currentDay={currentDay} />
+            <StaticGridWires currentDay={currentDay} />
             <DynamicFluidLayer 
               tasks={tasks} 
               selectedTaskId={selectedTaskId} 
@@ -319,6 +366,16 @@ export default function App() {
           <span className="text-[12px] font-black uppercase tracking-widest text-white">
             {selectedTask ? selectedTask.title : 'None'}
           </span>
+          {selectedTask && (
+            <button
+              onClick={() => handleDeleteTask(selectedTask.id)}
+              className="flex items-center gap-1.5 ml-4 px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
+              title="Delete task lane entirely"
+            >
+              <Trash2 size={12} />
+              <span>Delete Column</span>
+            </button>
+          )}
         </div>
 
         <div className="flex gap-4">

@@ -23,6 +23,15 @@ export const TIMELINE_DAYS = Array.from({ length: 28 }, (_, i) => {
   };
 });
 
+export const HABIT_COLORS = [
+  { color: 'bg-cyan-400', hex: '#22d3ee' },
+  { color: 'bg-rose-400', hex: '#fb7185' },
+  { color: 'bg-emerald-400', hex: '#34d399' },
+  { color: 'bg-amber-400', hex: '#fbbf24' },
+  { color: 'bg-purple-400', hex: '#c084fc' },
+  { color: 'bg-blue-400', hex: '#60a5fa' }
+];
+
 export const INITIAL_HABITS = [
   { 
     id: 'code', label: 'CODE', color: 'bg-cyan-400', hex: '#22d3ee', 
@@ -135,13 +144,9 @@ export function executeMatrixAction(tasks, taskId, action, currentDay) {
     const todayVal = nextMatrix[currentDay];
 
     if (action === 'START') {
-      if (todayVal === 0) {
-        nextMatrix[currentDay] = 2;
-      }
+      if (todayVal === 0) nextMatrix[currentDay] = 2;
     } else if (action === 'STOP') {
-      if (todayVal === 2) {
-        nextMatrix[currentDay] = 1;
-      }
+      if (todayVal === 2) nextMatrix[currentDay] = 1;
     } else if (action === 'UNDO') {
       nextMatrix[currentDay] = 0;
     }
@@ -150,15 +155,14 @@ export function executeMatrixAction(tasks, taskId, action, currentDay) {
   });
 }
 
-// Active tasks bleed forward into the new day; ended ones remain frozen
 export function shiftCurrentDay(tasks, fromDay, toDay) {
   if (toDay > fromDay) {
     return tasks.map((task) => {
       const nextMatrix = [...task.matrix];
       for (let day = fromDay; day < toDay; day++) {
         if (nextMatrix[day] === 2) {
-          nextMatrix[day] = 1; // solidify past
-          nextMatrix[day + 1] = 2; // flow down into the new active day
+          nextMatrix[day] = 1;
+          nextMatrix[day + 1] = 2;
         }
       }
       return { ...task, matrix: nextMatrix };
@@ -178,6 +182,22 @@ export function toggleHabitToday(habits, habitId, dayIndex, currentDay) {
   });
 }
 
+// Habit Creator
+export function createNewHabit(habits, label, totalDays) {
+  const colorObj = HABIT_COLORS[habits.length % HABIT_COLORS.length];
+  return [
+    ...habits,
+    {
+      id: `habit-${Date.now()}`,
+      label: label.trim().substring(0, 4).toUpperCase(),
+      color: colorObj.color,
+      hex: colorObj.hex,
+      data: new Array(totalDays).fill(0),
+    }
+  ];
+}
+
+// Task Creator
 export function createNewTask(tasks, title, totalDays) {
   const colorObj = TASK_COLORS[tasks.length % TASK_COLORS.length];
   return [
