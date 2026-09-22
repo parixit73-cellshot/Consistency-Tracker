@@ -1,224 +1,221 @@
 import React from 'react';
+import { Plus, ChevronUp, ChevronDown } from 'lucide-react';
 
-// Static UI Configuration (Single Source of Truth for Alignment)
-const ROW_HEIGHT = 72; // Exact row height in pixels
-const TRACKER_WIDTH = 48; // Base circle diameter in pixels
-const COLUMN_WIDTH = 144; // Column width in pixels
+// STAGE GEOMETRY (Absolute Grid System)
+const ROW_HEIGHT = 72; 
+const TRACK_WIDTH = 44; 
+const COLUMN_WIDTH = 140;
+const COLUMN_GAP = 40; 
+const CANVAS_PAD_X = 48; // Replaces CSS px-12
+const CANVAS_PAD_Y = 24; // Replaces CSS top-6 / mt-6
 
-// Pure Static Presentation Data
-const DATES = [
-  { offset: -3, formatted: '18/09/26' },
-  { offset: -2, formatted: '19/09/26' },
-  { offset: -1, formatted: '20/09/26' },
-  { offset: 0, formatted: '21/09/26', isToday: true },
-  { offset: 1, formatted: '22/09/26' },
-  { offset: 2, formatted: '23/09/26' },
-  { offset: 3, formatted: '24/09/26' }
+// Calculate exact X position baked with padding
+const getColLeft = (idx) => CANVAS_PAD_X + idx * (COLUMN_WIDTH + COLUMN_GAP);
+const getColCenter = (idx) => getColLeft(idx) + COLUMN_WIDTH / 2;
+
+// The Fixed Weekly Grid (Today is Thursday)
+const WEEK_DAYS = [
+  { dayIndex: 0, dayName: 'SUN', dateStr: '20/09' },
+  { dayIndex: 1, dayName: 'MON', dateStr: '21/09' },
+  { dayIndex: 2, dayName: 'TUE', dateStr: '22/09' },
+  { dayIndex: 3, dayName: 'WED', dateStr: '23/09' },
+  { dayIndex: 4, dayName: 'THU', dateStr: '24/09', isToday: true }, // Current Day
+  { dayIndex: 5, dayName: 'FRI', dateStr: '25/09' },
+  { dayIndex: 6, dayName: 'SAT', dateStr: '26/09' },
 ];
 
-const STATIC_TRACKS = [
+// Multi-Column Habit Rails
+const HABITS = [
+  { id: 'code', label: 'CODE', color: 'bg-cyan-400', hex: '#22d3ee', data: [1, 1, 1, 1, 1, 0, 0] },
+  { id: 'gym', label: 'GYM', color: 'bg-rose-400', hex: '#fb7185', data: [0, 1, 0, 1, 1, 0, 0] },
+  { id: 'diet', label: 'DIET', color: 'bg-emerald-400', hex: '#34d399', data: [1, 1, 1, 0, 1, 0, 0] }
+];
+
+// SPRINT DATA: Pure tracking (No planning envelopes)
+const SPRINT_DATA = [
   {
-    id: 'track-1',
-    title: 'Design Spec',
-    startOffset: -2,
-    spanDays: 2, // Ends on day 0 (Today)
-    targetOffset: 0, // Target was today -> On Schedule
-    color: 'bg-emerald-500 text-neutral-950',
-    isDelayed: false
+    id: 'col-1', 
+    title: '2D Animation', 
+    colorClass: 'bg-emerald-400', 
+    hex: '#34d399',
+    start: 1, days: 2, // Mon 00:00 to Tue 24:00
+    streak: 3 // 3 Week streak!
   },
   {
-    id: 'track-2',
-    title: 'Core Engine',
-    startOffset: -1,
-    spanDays: 3, // Spans to day 2
-    targetOffset: 1, // Target was day 1 -> Overdue/Delayed
-    color: 'bg-rose-500 text-neutral-950',
-    isDelayed: true
+    id: 'col-2', 
+    title: 'Motor Design', 
+    colorClass: 'bg-indigo-400', 
+    hex: '#818cf8',
+    start: 3, days: 0.5, // Wed 00:00 to Wed 12:00
+    streak: 0 // Broken or new streak
   },
   {
-    id: 'track-3',
-    title: 'Window Native',
-    startOffset: 0,
-    spanDays: 1, // 1 day = Perfect Circle
-    targetOffset: 0,
-    color: 'bg-indigo-400 text-neutral-950',
-    isDelayed: false
-  },
-  {
-    id: 'track-4',
-    title: 'Sync Pipeline',
-    startOffset: 1,
-    spanDays: 2,
-    targetOffset: 2,
-    color: 'bg-amber-400 text-neutral-950',
-    isDelayed: false
+    id: 'col-3', 
+    title: '3D Animation', 
+    colorClass: 'bg-amber-400', 
+    hex: '#fbbf24',
+    start: 3.5, days: 1.5, // Wed 12:00 to Thu 24:00 (Ongoing)
+    streak: 5 // 5 Week streak!
   }
 ];
 
 export default function App() {
-  const pastDaysVisible = 3; // Center offset reference (index 3 is offset 0)
-
   return (
-    <div className="flex h-screen w-screen bg-black text-white font-mono select-none overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-[#070707] text-white font-mono select-none overflow-hidden">
       
-      {/* ========================================================= */}
-      {/* 1. LEFT PANEL: Date Ribbon (Strict 7-Day Window)          */}
-      {/* ========================================================= */}
-      <aside className="w-44 h-full border-r border-neutral-900 flex flex-col justify-center px-6 shrink-0 bg-black z-20">
-        <div className="flex flex-col">
-          {DATES.map((d) => {
-            const distance = Math.abs(d.offset);
-
-            // Typographic scale down relative to distance from center (offset 0)
-            const typographyClasses = d.isToday
-              ? 'text-sm font-bold text-white scale-105 border-y-2 border-white bg-white/5 px-2'
-              : distance === 1
-              ? 'text-xs font-medium text-neutral-400 opacity-80 px-2'
-              : distance === 2
-              ? 'text-[11px] font-normal text-neutral-600 opacity-60 px-2'
-              : 'text-[10px] font-light text-neutral-700 opacity-40 px-2';
-
-            return (
-              <div
-                key={d.offset}
-                style={{ height: `${ROW_HEIGHT}px` }}
-                className="flex items-center"
-              >
-                <div className={`w-full py-1.5 flex items-center justify-center transition-all ${typographyClasses}`}>
-                  <span>{d.formatted}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </aside>
-
-      {/* ========================================================= */}
-      {/* 2. MAIN CANVAS: Staggered Headers & Vertical Tracks        */}
-      {/* ========================================================= */}
-      <main className="flex-1 h-full flex flex-col overflow-x-auto overflow-y-hidden bg-black relative">
-        
-        {/* TOP HEADER: Staggered Badges (Odd / Even Elevation) */}
-        <div className="h-32 pt-3 px-12 border-b border-neutral-900 flex items-start shrink-0 min-w-max">
-          <div className="flex gap-16">
-            {STATIC_TRACKS.map((track, idx) => {
-              const isEven = idx % 2 === 0;
-
-              return (
-                <div
-                  key={track.id}
-                  style={{ width: `${COLUMN_WIDTH}px` }}
-                  className="flex flex-col items-center relative"
-                >
-                  {/* Alternating Box Elevation */}
-                  <div
-                    className={`w-full px-3 py-2 border rounded text-xs font-bold text-center tracking-wide ${
-                      isEven
-                        ? 'translate-y-1 border-neutral-700 bg-neutral-950 text-neutral-200'
-                        : 'translate-y-10 border-neutral-800 bg-neutral-900 text-neutral-400'
-                    }`}
-                  >
-                    <div className="truncate">{track.title}</div>
-                  </div>
-
-                  {/* Drop-line Umbilical to Column Track Spine */}
-                  <svg
-                    className="w-full absolute left-0 pointer-events-none"
-                    style={{
-                      top: isEven ? '40px' : '76px',
-                      height: isEven ? '72px' : '36px'
-                    }}
-                  >
-                    <line
-                      x1="50%"
-                      y1="0"
-                      x2="50%"
-                      y2="100%"
-                      stroke="#404040"
-                      strokeWidth="1.5"
-                      strokeDasharray="2 2"
-                    />
-                  </svg>
-                </div>
-              );
-            })}
+      {/* 1. TOP HEADER */}
+      <header className="h-14 border-b border-white/10 bg-[#0a0a0a] flex items-center px-6 shrink-0 z-30 justify-between">
+        <div className="flex items-center gap-8">
+          <span className="text-[11px] font-black tracking-[0.2em] uppercase text-neutral-500">
+            Sprint Board
+          </span>
+          <div className="h-4 w-[1px] bg-white/10" />
+          <div className="text-[11px] text-neutral-300 font-bold tracking-widest uppercase">
+            Week 39 <span className="text-neutral-600 mx-2">/</span> Sep 2026
           </div>
         </div>
+        <button className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white text-black hover:bg-neutral-200 transition-colors text-[10px] font-black tracking-widest uppercase">
+          <Plus size={14} strokeWidth={3} />
+          <span>New Task</span>
+        </button>
+      </header>
 
-        {/* TRACKS CANVAS: Synchronized with the 7-Day Window */}
-        <div className="flex-1 px-12 relative flex items-center min-w-max">
+      {/* Main Body */}
+      <div className="flex-1 flex overflow-hidden">
+        
+        {/* 2. MULTI-COLUMN HABIT RAILS */}
+        <aside className="w-32 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0 z-20">
+          <div className="h-10 border-b border-white/5 flex items-center justify-center px-2">
+            <div className="flex w-full justify-around">
+              {HABITS.map(h => (
+                <span key={h.id} className="text-[8px] tracking-wider text-neutral-500 font-black uppercase rotate-[-45deg] origin-bottom-left -translate-y-2 translate-x-2">
+                  {h.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col py-6">
+            {WEEK_DAYS.map((d) => (
+              <div key={d.dayIndex} style={{ height: `${ROW_HEIGHT}px` }} className="w-full flex items-center justify-around px-4">
+                {HABITS.map(habit => {
+                  const isDone = habit.data[d.dayIndex];
+                  const isFuture = d.dayIndex > 4; // After Thursday
+                  return (
+                    <div key={habit.id} className="relative h-full flex items-center justify-center w-4">
+                      <div className="absolute inset-y-1 w-[2px] bg-white/5 rounded-full" />
+                      <div className={`absolute w-[4px] rounded-full transition-all duration-500 ${
+                          isDone ? `h-10 ${habit.color} shadow-[0_0_10px_${habit.hex}40]` : 'h-0'
+                        } ${isFuture ? 'opacity-20' : 'opacity-100'}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="h-10 border-t border-white/5" />
+        </aside>
+
+        {/* 3. DATES LIST */}
+        <aside className="w-28 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0 z-30 shadow-[10px_0_20px_rgba(0,0,0,0.5)]">
+          <button className="h-10 border-b border-white/5 hover:bg-white/5 text-neutral-500 flex items-center justify-center gap-2 text-[9px] font-black tracking-widest transition-colors uppercase">
+            <ChevronUp size={12} strokeWidth={3} />
+          </button>
+          <div className="flex-1 flex flex-col py-6">
+            {WEEK_DAYS.map((d) => (
+              <div key={d.dayIndex} style={{ height: `${ROW_HEIGHT}px` }} className="flex items-center px-3">
+                <div className={`w-full py-2 px-2 rounded flex flex-col items-center justify-center border transition-all ${
+                    d.isToday ? 'border-white/20 bg-white/10 shadow-sm' : 'border-transparent'
+                  }`}
+                >
+                  <span className={`text-[10px] font-black ${d.isToday ? 'text-white' : 'text-neutral-500'}`}>{d.dayName}</span>
+                  <span className="text-[9px] font-mono text-neutral-600">{d.dateStr}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="h-10 border-t border-white/5 hover:bg-white/5 text-neutral-500 flex items-center justify-center gap-2 text-[9px] font-black tracking-widest transition-colors uppercase">
+            <ChevronDown size={12} strokeWidth={3} />
+          </button>
+        </aside>
+
+        {/* 4. MAIN STORY CANVAS */}
+        <main className="flex-1 overflow-x-auto overflow-y-hidden bg-[#050505] flex flex-col">
           
-          {/* Subtle Horizontal Date Reference Wires */}
-          <div className="absolute inset-0 flex flex-col justify-center pointer-events-none">
-            {DATES.map((d) => (
-              <div
-                key={d.offset}
-                style={{ height: `${ROW_HEIGHT}px` }}
-                className={`w-full border-b ${
-                  d.isToday ? 'border-neutral-800 bg-white/[0.02]' : 'border-neutral-950'
-                }`}
-              />
+          {/* Strict Absolute Column Titles */}
+          <div className="h-10 border-b border-white/5 bg-[#0a0a0a] relative min-w-max shrink-0 px-12">
+            {SPRINT_DATA.map((task, idx) => (
+              <div 
+                key={task.id} 
+                style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }} 
+                className="absolute h-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400"
+              >
+                <span>{task.title}</span>
+                {task.streak > 0 && (
+                  <span className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
+                    🔥{task.streak}
+                  </span>
+                )}
+              </div>
             ))}
           </div>
 
-          {/* Vertical Track Columns */}
-          <div className="flex gap-16 relative z-10">
-            {STATIC_TRACKS.map((track) => {
-              const visualStartIndex = pastDaysVisible + track.startOffset;
-              const isCircle = track.spanDays <= 1;
-              const topOffset = visualStartIndex * ROW_HEIGHT + (ROW_HEIGHT - TRACKER_WIDTH) / 2;
+          {/* STRICT ABSOLUTE SCROLLING CANVAS (Zero CSS offset bugs) */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
+            <div className="relative min-w-max w-full" style={{ height: `${7 * ROW_HEIGHT + 100}px` }}>
               
-              const shapeHeight = isCircle
-                ? TRACKER_WIDTH
-                : TRACKER_WIDTH + (track.spanDays - 1) * ROW_HEIGHT;
-
-              // Anticipated Deadline Target Ring Position
-              const targetVisualIndex = pastDaysVisible + track.targetOffset;
-              const targetTopOffset = targetVisualIndex * ROW_HEIGHT + (ROW_HEIGHT - TRACKER_WIDTH) / 2;
-
-              return (
-                <div
-                  key={track.id}
-                  style={{
-                    width: `${COLUMN_WIDTH}px`,
-                    height: `${ROW_HEIGHT * 7}px`
-                  }}
-                  className="relative flex justify-center"
-                >
-                  {/* Anticipated Target Cradle (Catches the circle upon arrival) */}
-                  <div
-                    style={{
-                      top: `${targetTopOffset + TRACKER_WIDTH / 2}px`,
-                      width: `${TRACKER_WIDTH}px`,
-                      height: `${TRACKER_WIDTH / 2}px`
-                    }}
-                    className={`absolute rounded-b-full border-b-[5px] border-x-[5px] border-t-0 pointer-events-none transition-colors ${
-                      track.isDelayed ? 'border-rose-500' : 'border-neutral-500'
-                    }`}
-                  />
-
-                  {/* The Solid Morphing Shape (Circle or Stadium Pill) */}
-                  <div
-                    style={{
-                      top: `${topOffset}px`,
-                      height: `${shapeHeight}px`,
-                      width: `${TRACKER_WIDTH}px`
-                    }}
-                    className={`absolute rounded-full flex flex-col items-center justify-between p-2 shadow-lg ${track.color}`}
-                  >
-                    <span className="text-[10px] font-bold tracking-wider">
-                      {track.spanDays}d
-                    </span>
-                    <div className="w-2 h-2 rounded-full bg-neutral-950/60" />
+              {/* Z-0: Background Grid Wires */}
+              <div className="absolute inset-0 pointer-events-none z-0">
+                {WEEK_DAYS.map((d) => (
+                  <div key={d.dayIndex} style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px` }} className="absolute w-full flex items-center">
+                    <div className={`w-full border-b ${d.isToday ? 'border-white/15 shadow-[0_0_8px_rgba(255,255,255,0.1)]' : 'border-white/5'}`} />
                   </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+
+             
+              {/* Z-20: Task Tracking Columns */}
+              <div className="absolute inset-0 z-20 pointer-events-none">
+                {SPRINT_DATA.map((task, idx) => {
+                  const hasActual = task.start !== null && task.start !== undefined;
+                  if (!hasActual) return null;
+
+                  const actualTop = CANVAS_PAD_Y + task.start * ROW_HEIGHT;
+                  const actualHeight = task.days * ROW_HEIGHT;
+
+                  return (
+                    <div 
+                      key={task.id} 
+                      style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }} 
+                      className="absolute h-full flex justify-center"
+                    >
+                      {/* Sub-lane center guideline */}
+                      <div className="absolute inset-y-0 w-[1px] bg-white/5" />
+
+                      {/* UMBILICAL CORD (Carrying the Streak Momentum) */}
+                      {task.streak > 0 && (
+                        <div 
+                          style={{ top: 0, height: `${actualTop}px` }}
+                          className={`absolute w-[3px] opacity-70 ${task.colorClass} shadow-[0_0_12px_${task.hex}60]`}
+                        />
+                      )}
+
+                      {/* Solid Time Fluid (The Reality) */}
+                      <div
+                        style={{ top: `${actualTop}px`, height: `${actualHeight}px`, width: `${TRACK_WIDTH}px` }}
+                        className={`absolute rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center ${task.colorClass}`}
+                      >
+                         <span className="text-[10px] font-black text-black/60 rotate-90">{task.days}d</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+            </div>
           </div>
-
-        </div>
-      </main>
-
+        </main>
+      </div>
     </div>
   );
 }
