@@ -1,39 +1,52 @@
-import React, { useState } from 'react';
-import { Plus, ChevronUp, ChevronDown, Play, Square, RotateCcw } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed } from 'lucide-react';
 import {
   ROW_HEIGHT,
   TRACK_WIDTH,
   COLUMN_WIDTH,
   CANVAS_PAD_Y,
-  CURRENT_DAY_INDEX,
-  WEEK_DAYS,
+  BASE_CURRENT_DAY_INDEX,
+  TIMELINE_DAYS,
   INITIAL_HABITS,
   INITIAL_TASKS,
   getColLeft,
   parseTaskMatrix,
   executeMatrixAction,
+  shiftCurrentDay,
   toggleHabitToday,
   createNewTask,
 } from './trackerStore';
 
-function StaticGridWires() {
+function StaticGridWires({ daysCount, currentDay }) {
   return (
     <div className="absolute inset-0 pointer-events-none z-0">
-      {WEEK_DAYS.map((d) => (
-        <div key={d.dayIndex} style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px` }} className="absolute w-full flex items-center">
-          <div className={`w-full border-b ${d.isToday ? 'border-white/15 shadow-[0_0_8px_rgba(255,255,255,0.1)]' : 'border-white/5'}`} />
+      {TIMELINE_DAYS.map((d) => (
+        <div 
+          key={d.dayIndex} 
+          style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px` }} 
+          className="absolute w-full flex items-center"
+        >
+          <div 
+            className={`w-full border-b ${
+              d.dayIndex === currentDay 
+                ? 'border-white/20 shadow-[0_0_8px_rgba(255,255,255,0.15)]' 
+                : d.dayIndex % 7 === 0 
+                  ? 'border-white/15' 
+                  : 'border-white/5'
+            }`} 
+          />
         </div>
       ))}
     </div>
   );
 }
 
-function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask }) {
+function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask, currentDay }) {
   return (
     <div className="absolute inset-0 z-20">
       {tasks.map((task, idx) => {
         const isSelected = selectedTaskId === task.id;
-        const { blocks, cords } = parseTaskMatrix(task);
+        const { blocks, cords } = parseTaskMatrix(task, currentDay);
 
         return (
           <div
@@ -46,7 +59,7 @@ function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask }) {
           >
             <div className="absolute inset-y-0 w-[1px] bg-white/5 pointer-events-none" />
 
-            {/* Derived Umbilical Cords */}
+            {/* Umbilical Cords */}
             {cords.map((cord, cIdx) => {
               const top = CANVAS_PAD_Y + cord.startY * ROW_HEIGHT;
               const height = (cord.endY - cord.startY) * ROW_HEIGHT;
@@ -59,7 +72,7 @@ function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask }) {
               );
             })}
 
-            {/* Derived Contiguous Time Blocks */}
+            {/* Contiguous Fluid Blocks */}
             {blocks.map((block, bIdx) => {
               const top = CANVAS_PAD_Y + block.start * ROW_HEIGHT;
               const height = block.days * ROW_HEIGHT;
@@ -85,71 +98,169 @@ export default function App() {
   const [tasks, setTasks] = useState(INITIAL_TASKS);
   const [habits, setHabits] = useState(INITIAL_HABITS);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [currentDay, setCurrentDay] = useState(BASE_CURRENT_DAY_INDEX);
+  
+  const scrollContainerRef = useRef(null);
+
+  const centerCurrentWeek = (smooth = true) => {
+    if (!scrollContainerRef.current) return;
+    const currentWeekStartDay = Math.floor(currentDay / 7) * 7;
+    const targetScroll = CANVAS_PAD_Y + currentWeekStartDay * ROW_HEIGHT - 12;
+    scrollContainerRef.current.scrollTo({
+      top: Math.max(0, targetScroll),
+      behavior: smooth ? 'smooth' : 'auto',
+    });
+  };
+
+  useEffect(() => {
+    centerCurrentWeek(false);
+  }, []);
 
   const handleNewTaskPrompt = () => {
     const title = window.prompt('Enter new task name:');
-    if (title) setTasks((prev) => createNewTask(prev, title));
+    if (title && title.trim()) {
+      setTasks((prev) => createNewTask(prev, title, TIMELINE_DAYS.length));
+    }
   };
 
   const handleHabitClick = (habitId, dayIndex) => {
-    setHabits((prev) => toggleHabitToday(prev, habitId, dayIndex));
+    setHabits((prev) => toggleHabitToday(prev, habitId, dayIndex, currentDay));
   };
 
   const handleAction = (action) => {
     if (!selectedTaskId) return;
-    setTasks((prev) => executeMatrixAction(prev, selectedTaskId, action));
+    setTasks((prev) => executeMatrixAction(prev, selectedTaskId, action, currentDay));
+  };
+
+  const handleShiftDay = (delta) => {
+    const nextDay = Math.min(Math.max(0, currentDay + delta), TIMELINE_DAYS.length - 1);
+    if (nextDay !== currentDay) {
+      setTasks((prev) => shiftCurrentDay(prev, currentDay, nextDay));
+      setCurrentDay(nextDay);
+    }
   };
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
-  const todayStatus = selectedTask ? selectedTask.matrix[CURRENT_DAY_INDEX] : 0;
+  const todayStatus = selectedTask ? selectedTask.matrix[currentDay] : 0;
+  const totalStreamHeight = CANVAS_PAD_Y + TIMELINE_DAYS.length * ROW_HEIGHT + 120;
+  const currentDayInfo = TIMELINE_DAYS[currentDay];
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#070707] text-white font-mono select-none overflow-hidden">
+      
       {/* HEADER */}
-      <header className="h-14 border-b border-white/10 bg-[#0a0a0a] flex items-center px-6 shrink-0 z-30 justify-between">
-        <div className="flex items-center gap-8">
+      <header className="h-14 border-b border-white/10 bg-[#0a0a0a] flex items-center px-6 shrink-0 z-40 justify-between">
+        <div className="flex items-center gap-6">
           <span className="text-[11px] font-black tracking-[0.2em] uppercase text-neutral-500">Sprint Board</span>
           <div className="h-4 w-[1px] bg-white/10" />
           <div className="text-[11px] text-neutral-300 font-bold tracking-widest uppercase">
-            Week 39 <span className="text-neutral-600 mx-2">/</span> Sep 2026
+            Week {currentDayInfo.weekNum} <span className="text-neutral-600 mx-2">/</span> {currentDayInfo.dayName} {currentDayInfo.dateStr}
           </div>
         </div>
-        <button
-          onClick={handleNewTaskPrompt}
-          className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white text-black hover:bg-neutral-200 transition-colors text-[10px] font-black tracking-widest uppercase cursor-pointer"
-        >
-          <Plus size={14} strokeWidth={3} />
-          <span>New Task</span>
-        </button>
+
+        <div className="flex items-center gap-3">
+          {/* CENTER WEEK BUTTON */}
+          <button
+            onClick={() => centerCurrentWeek(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+            title="Recenter view to current week (Sun–Sat)"
+          >
+            <LocateFixed size={13} />
+            <span>Focus Week</span>
+          </button>
+
+          {/* TIME TRAVEL DEBUG PANEL */}
+          <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
+            <span className="text-[9px] font-black text-neutral-500 uppercase tracking-wider mr-1">Simulate:</span>
+            <button 
+              onClick={() => handleShiftDay(-1)} 
+              className="p-1 hover:bg-white/10 rounded transition-colors text-neutral-400 hover:text-white cursor-pointer"
+              title="Go back 1 day"
+            >
+              <Rewind size={12} />
+            </button>
+            <span className="text-[10px] font-bold px-1 text-white">{currentDayInfo.dateStr}</span>
+            <button 
+              onClick={() => handleShiftDay(1)} 
+              className="p-1 hover:bg-white/10 rounded transition-colors text-neutral-400 hover:text-white cursor-pointer"
+              title="Advance 1 day (Flows active tasks downward)"
+            >
+              <FastForward size={12} />
+            </button>
+          </div>
+
+          <button
+            onClick={handleNewTaskPrompt}
+            className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white text-black hover:bg-neutral-200 transition-colors text-[10px] font-black tracking-widest uppercase cursor-pointer"
+          >
+            <Plus size={14} strokeWidth={3} />
+            <span>New Task</span>
+          </button>
+        </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Habit Rails */}
-        <aside className="w-32 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0 z-20">
-          <div className="h-10 border-b border-white/5 flex items-center justify-center px-2">
-            <div className="flex w-full justify-around">
-              {habits.map((h) => (
-                <span
-                  key={h.id}
-                  className="text-[8px] tracking-wider text-neutral-500 font-black uppercase rotate-[-45deg] origin-bottom-left -translate-y-2 translate-x-2"
-                >
-                  {h.label}
-                </span>
-              ))}
-            </div>
+      {/* SYNCHRONIZED STREAM BODY */}
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        
+        {/* STICKY COLUMN TITLES BAR */}
+        <div className="h-10 border-b border-white/5 bg-[#0a0a0a] flex shrink-0 z-30">
+          <div className="w-32 border-r border-white/5 flex items-center justify-around px-2 shrink-0">
+            {habits.map((h) => (
+              <span
+                key={h.id}
+                className="text-[8px] tracking-wider text-neutral-500 font-black uppercase rotate-[-45deg] origin-bottom-left -translate-y-2 translate-x-2"
+              >
+                {h.label}
+              </span>
+            ))}
           </div>
-          <div className="flex-1 flex flex-col py-6">
-            {WEEK_DAYS.map((d) => (
-              <div key={d.dayIndex} style={{ height: `${ROW_HEIGHT}px` }} className="w-full flex items-center justify-around px-4">
+
+          <div className="w-28 border-r border-white/5 flex items-center justify-center shrink-0">
+            <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
+          </div>
+
+          <div className="flex-1 relative overflow-hidden min-w-max">
+            {tasks.map((task, idx) => (
+              <div
+                key={task.id}
+                style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
+                className={`absolute h-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
+                  selectedTaskId === task.id ? 'text-white' : 'text-neutral-400'
+                }`}
+              >
+                <span>{task.title}</span>
+                {task.streak > 0 && (
+                  <span className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
+                    🔥{task.streak}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* UNIFIED VERTICAL SCROLL STREAM */}
+        <div 
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto overflow-x-hidden flex relative bg-[#050505] no-scrollbar"
+        >
+          {/* Habit Rails */}
+          <div className="w-32 border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative" style={{ height: `${totalStreamHeight}px` }}>
+            {TIMELINE_DAYS.map((d) => (
+              <div 
+                key={d.dayIndex} 
+                style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }} 
+                className="absolute w-full flex items-center justify-around px-4"
+              >
                 {habits.map((habit) => {
                   const isDone = habit.data[d.dayIndex];
-                  const isToday = d.dayIndex === CURRENT_DAY_INDEX;
+                  const isToday = d.dayIndex === currentDay;
                   return (
                     <div
                       key={habit.id}
                       onClick={() => handleHabitClick(habit.id, d.dayIndex)}
                       className={`relative h-full flex items-center justify-center w-4 ${
-                        isToday ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                        isToday ? 'cursor-pointer' : 'cursor-default opacity-40'
                       }`}
                     >
                       <div className="absolute inset-y-1 w-[2px] bg-white/5 rounded-full" />
@@ -164,55 +275,41 @@ export default function App() {
               </div>
             ))}
           </div>
-          <div className="h-10 border-t border-white/5" />
-        </aside>
 
-        {/* Dates Column */}
-        <aside className="w-28 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0 z-30 shadow-[10px_0_20px_rgba(0,0,0,0.5)]">
-          <button className="h-10 border-b border-white/5 hover:bg-white/5 text-neutral-500 flex items-center justify-center gap-2 transition-colors cursor-pointer">
-            <ChevronUp size={12} strokeWidth={3} />
-          </button>
-          <div className="flex-1 flex flex-col py-6">
-            {WEEK_DAYS.map((d) => (
-              <div key={d.dayIndex} style={{ height: `${ROW_HEIGHT}px` }} className="flex items-center px-3">
+          {/* Dates Column */}
+          <div className="w-28 border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative shadow-[10px_0_20px_rgba(0,0,0,0.4)]" style={{ height: `${totalStreamHeight}px` }}>
+            {TIMELINE_DAYS.map((d) => (
+              <div 
+                key={d.dayIndex} 
+                style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }} 
+                className="absolute w-full flex items-center px-3"
+              >
                 <div
                   className={`w-full py-2 px-2 rounded flex flex-col items-center justify-center border transition-all ${
-                    d.isToday ? 'border-white/20 bg-white/10 shadow-sm' : 'border-transparent'
+                    d.dayIndex === currentDay ? 'border-white/20 bg-white/10 shadow-sm' : 'border-transparent'
                   }`}
                 >
-                  <span className={`text-[10px] font-black ${d.isToday ? 'text-white' : 'text-neutral-500'}`}>{d.dayName}</span>
+                  <span className={`text-[10px] font-black ${d.dayIndex === currentDay ? 'text-white' : 'text-neutral-500'}`}>
+                    {d.dayName}
+                  </span>
                   <span className="text-[9px] font-mono text-neutral-600">{d.dateStr}</span>
                 </div>
               </div>
             ))}
           </div>
-          <button className="h-10 border-t border-white/5 hover:bg-white/5 text-neutral-500 flex items-center justify-center gap-2 transition-colors cursor-pointer">
-            <ChevronDown size={12} strokeWidth={3} />
-          </button>
-        </aside>
 
-        {/* Canvas */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#050505] flex flex-col">
-          <div className="h-10 border-b border-white/5 bg-[#0a0a0a] relative min-w-max shrink-0 px-12 z-30">
-            {tasks.map((task, idx) => (
-              <div
-                key={task.id}
-                style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
-                className={`absolute h-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
-                  selectedTaskId === task.id ? 'text-white' : 'text-neutral-400'
-                }`}
-              >
-                <span>{task.title}</span>
-                {task.streak > 0 && <span className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">🔥{task.streak}</span>}
-              </div>
-            ))}
+          {/* Main Continuous Canvas */}
+          <div className="flex-1 relative min-w-max" style={{ height: `${totalStreamHeight}px` }}>
+            <StaticGridWires daysCount={TIMELINE_DAYS.length} currentDay={currentDay} />
+            <DynamicFluidLayer 
+              tasks={tasks} 
+              selectedTaskId={selectedTaskId} 
+              onSelectTask={setSelectedTaskId} 
+              currentDay={currentDay}
+            />
           </div>
 
-          <div className="relative min-w-max w-full" style={{ height: `${7 * ROW_HEIGHT + 100}px` }}>
-            <StaticGridWires />
-            <DynamicFluidLayer tasks={tasks} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} />
-          </div>
-        </main>
+        </div>
       </div>
 
       {/* BOTTOM CONTROLS PANEL */}
@@ -225,7 +322,6 @@ export default function App() {
         </div>
 
         <div className="flex gap-4">
-          {/* START TODAY */}
           <button
             disabled={!selectedTask || todayStatus === 2}
             onClick={() => handleAction('START')}
@@ -239,7 +335,6 @@ export default function App() {
             <span>Start Today</span>
           </button>
 
-          {/* MARK ENDED / STOP */}
           <button
             disabled={!selectedTask || todayStatus !== 2}
             onClick={() => handleAction('STOP')}
@@ -253,7 +348,6 @@ export default function App() {
             <span>Mark Ended</span>
           </button>
 
-          {/* UNDO / DELETE TODAY */}
           <button
             disabled={!selectedTask || todayStatus === 0}
             onClick={() => handleAction('UNDO')}
