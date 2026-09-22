@@ -23,26 +23,36 @@ export const TIMELINE_DAYS = Array.from({ length: 28 }, (_, i) => {
   };
 });
 
-export const HABIT_COLORS = [
-  { color: 'bg-cyan-400', hex: '#22d3ee' },
-  { color: 'bg-rose-400', hex: '#fb7185' },
-  { color: 'bg-emerald-400', hex: '#34d399' },
-  { color: 'bg-amber-400', hex: '#fbbf24' },
-  { color: 'bg-purple-400', hex: '#c084fc' },
-  { color: 'bg-blue-400', hex: '#60a5fa' }
+export const HABIT_PALETTE = [
+  { name: 'Cyan', class: 'bg-cyan-400', hex: '#22d3ee' },
+  { name: 'Rose', class: 'bg-rose-400', hex: '#fb7185' },
+  { name: 'Emerald', class: 'bg-emerald-400', hex: '#34d399' },
+  { name: 'Amber', class: 'bg-amber-400', hex: '#fbbf24' },
+  { name: 'Purple', class: 'bg-purple-400', hex: '#c084fc' },
+  { name: 'Blue', class: 'bg-blue-400', hex: '#60a5fa' }
+];
+
+export const TASK_PALETTE = [
+  { name: 'Emerald', class: 'bg-emerald-400', hex: '#34d399' },
+  { name: 'Indigo', class: 'bg-indigo-400', hex: '#818cf8' },
+  { name: 'Amber', class: 'bg-amber-400', hex: '#fbbf24' },
+  { name: 'Rose', class: 'bg-rose-400', hex: '#fb7185' },
+  { name: 'Cyan', class: 'bg-cyan-400', hex: '#22d3ee' },
+  { name: 'Purple', class: 'bg-purple-400', hex: '#c084fc' },
+  { name: 'Orange', class: 'bg-orange-400', hex: '#fb923c' }
 ];
 
 export const INITIAL_HABITS = [
   { 
-    id: 'code', label: 'CODE', color: 'bg-cyan-400', hex: '#22d3ee', 
+    id: 'habit-1', label: 'CODE', color: 'bg-cyan-400', hex: '#22d3ee', 
     data: [1, 1, 1, 1, 1, 0, 0,  1, 1, 1, 1, 0, 1, 1,  1, 1, 1, 1, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   },
   { 
-    id: 'gym', label: 'GYM', color: 'bg-rose-400', hex: '#fb7185', 
+    id: 'habit-2', label: 'GYM', color: 'bg-rose-400', hex: '#fb7185', 
     data: [0, 1, 0, 1, 1, 0, 0,  0, 1, 0, 1, 1, 0, 0,  0, 1, 0, 1, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   },
   { 
-    id: 'diet', label: 'DIET', color: 'bg-emerald-400', hex: '#34d399', 
+    id: 'habit-3', label: 'DIET', color: 'bg-emerald-400', hex: '#34d399', 
     data: [1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 0, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   }
 ];
@@ -84,13 +94,29 @@ export const INITIAL_TASKS = [
   },
 ];
 
-export const TASK_COLORS = [
-  { class: 'bg-blue-400', hex: '#60a5fa' },
-  { class: 'bg-purple-400', hex: '#c084fc' },
-  { class: 'bg-pink-400', hex: '#f472b6' },
-  { class: 'bg-orange-400', hex: '#fb923c' },
-  { class: 'bg-teal-400', hex: '#2dd4bf' }
-];
+// Parser for continuous habit chains
+export function parseHabitBlocks(habitData) {
+  const blocks = [];
+  let start = null;
+  let len = 0;
+
+  for (let i = 0; i < habitData.length; i++) {
+    if (habitData[i] === 1) {
+      if (start === null) start = i;
+      len++;
+    } else {
+      if (start !== null) {
+        blocks.push({ start, days: len });
+        start = null;
+        len = 0;
+      }
+    }
+  }
+  if (start !== null) {
+    blocks.push({ start, days: len });
+  }
+  return blocks;
+}
 
 export function parseTaskMatrix(task, currentDay) {
   const blocks = [];
@@ -182,33 +208,34 @@ export function toggleHabitToday(habits, habitId, dayIndex, currentDay) {
   });
 }
 
-// Habit Creator
-export function createNewHabit(habits, label, totalDays) {
-  const colorObj = HABIT_COLORS[habits.length % HABIT_COLORS.length];
-  return [
-    ...habits,
-    {
-      id: `habit-${Date.now()}`,
-      label: label.trim().substring(0, 4).toUpperCase(),
-      color: colorObj.color,
-      hex: colorObj.hex,
-      data: new Array(totalDays).fill(0),
-    }
-  ];
+// Splice insertion functions with arbitrary positional placement
+export function insertNewTask(tasks, { title, colorObj, position }, totalDays) {
+  const newTask = {
+    id: `col-${Date.now()}`,
+    title: title.trim().substring(0, 16),
+    colorClass: colorObj.class,
+    hex: colorObj.hex,
+    streak: 0,
+    matrix: new Array(totalDays).fill(0),
+  };
+
+  const copy = [...tasks];
+  const targetIndex = Math.max(0, Math.min(position - 1, copy.length));
+  copy.splice(targetIndex, 0, newTask);
+  return copy;
 }
 
-// Task Creator
-export function createNewTask(tasks, title, totalDays) {
-  const colorObj = TASK_COLORS[tasks.length % TASK_COLORS.length];
-  return [
-    ...tasks,
-    {
-      id: `col-${Date.now()}`,
-      title: title.trim().substring(0, 14),
-      colorClass: colorObj.class,
-      hex: colorObj.hex,
-      streak: 0,
-      matrix: new Array(totalDays).fill(0),
-    },
-  ];
+export function insertNewHabit(habits, { label, colorObj, position }, totalDays) {
+  const newHabit = {
+    id: `habit-${Date.now()}`,
+    label: label.trim().substring(0, 5).toUpperCase(),
+    color: colorObj.class,
+    hex: colorObj.hex,
+    data: new Array(totalDays).fill(0),
+  };
+
+  const copy = [...habits];
+  const targetIndex = Math.max(0, Math.min(position - 1, copy.length));
+  copy.splice(targetIndex, 0, newHabit);
+  return copy;
 }

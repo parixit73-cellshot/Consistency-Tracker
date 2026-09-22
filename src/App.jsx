@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, Trash2, X } from 'lucide-react';
+import { Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, Trash2, X, Check } from 'lucide-react';
 import {
   ROW_HEIGHT,
   TRACK_WIDTH,
@@ -7,15 +7,18 @@ import {
   CANVAS_PAD_Y,
   BASE_CURRENT_DAY_INDEX,
   TIMELINE_DAYS,
+  HABIT_PALETTE,
+  TASK_PALETTE,
   INITIAL_HABITS,
   INITIAL_TASKS,
   getColLeft,
+  parseHabitBlocks,
   parseTaskMatrix,
   executeMatrixAction,
   shiftCurrentDay,
   toggleHabitToday,
-  createNewHabit,
-  createNewTask,
+  insertNewTask,
+  insertNewHabit,
 } from './trackerStore';
 
 function StaticGridWires({ currentDay }) {
@@ -100,6 +103,17 @@ export default function App() {
   const [habits, setHabits] = useState(INITIAL_HABITS);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [currentDay, setCurrentDay] = useState(BASE_CURRENT_DAY_INDEX);
+
+  // Modals state
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskForm, setTaskForm] = useState({ title: '', colorIdx: 0, position: 1 });
+
+  const [habitModalOpen, setHabitModalOpen] = useState(false);
+  const [habitForm, setHabitForm] = useState({ label: '', colorIdx: 0, position: 1 });
+
+  // Inline editing state
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editValue, setEditValue] = useState('');
   
   const scrollContainerRef = useRef(null);
 
@@ -117,12 +131,27 @@ export default function App() {
     centerCurrentWeek(false);
   }, []);
 
-  // --- ACTIONS ---
-  const handleNewTaskPrompt = () => {
-    const title = window.prompt('Enter new task name:');
-    if (title && title.trim()) {
-      setTasks((prev) => createNewTask(prev, title, TIMELINE_DAYS.length));
-    }
+  // --- TASK ACTIONS ---
+  const handleOpenTaskModal = () => {
+    setTaskForm({ title: '', colorIdx: tasks.length % TASK_PALETTE.length, position: tasks.length + 1 });
+    setTaskModalOpen(true);
+  };
+
+  const handleCreateTask = (e) => {
+    e.preventDefault();
+    if (!taskForm.title.trim()) return;
+    setTasks((prev) =>
+      insertNewTask(
+        prev,
+        {
+          title: taskForm.title,
+          colorObj: TASK_PALETTE[taskForm.colorIdx],
+          position: parseInt(taskForm.position, 10),
+        },
+        TIMELINE_DAYS.length
+      )
+    );
+    setTaskModalOpen(false);
   };
 
   const handleDeleteTask = (taskId) => {
@@ -131,11 +160,27 @@ export default function App() {
     if (selectedTaskId === taskId) setSelectedTaskId(null);
   };
 
-  const handleAddHabit = () => {
-    const label = window.prompt('Enter habit label (max 4 chars, e.g. READ):');
-    if (label && label.trim()) {
-      setHabits((prev) => createNewHabit(prev, label, TIMELINE_DAYS.length));
-    }
+  // --- HABIT ACTIONS ---
+  const handleOpenHabitModal = () => {
+    setHabitForm({ label: '', colorIdx: habits.length % HABIT_PALETTE.length, position: habits.length + 1 });
+    setHabitModalOpen(true);
+  };
+
+  const handleCreateHabit = (e) => {
+    e.preventDefault();
+    if (!habitForm.label.trim()) return;
+    setHabits((prev) =>
+      insertNewHabit(
+        prev,
+        {
+          label: habitForm.label,
+          colorObj: HABIT_PALETTE[habitForm.colorIdx],
+          position: parseInt(habitForm.position, 10),
+        },
+        TIMELINE_DAYS.length
+      )
+    );
+    setHabitModalOpen(false);
   };
 
   const handleDeleteHabit = (e, habitId) => {
@@ -145,6 +190,25 @@ export default function App() {
 
   const handleHabitClick = (habitId, dayIndex) => {
     setHabits((prev) => toggleHabitToday(prev, habitId, dayIndex, currentDay));
+  };
+
+  // --- INLINE EDITING ---
+  const handleStartRename = (id, currentTitle) => {
+    setEditingItemId(id);
+    setEditValue(currentTitle);
+  };
+
+  const handleSaveRename = (type, id) => {
+    if (type === 'task') {
+      setTasks((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, title: editValue.trim() || t.title } : t))
+      );
+    } else {
+      setHabits((prev) =>
+        prev.map((h) => (h.id === id ? { ...h, label: (editValue.trim() || h.label).substring(0, 5).toUpperCase() } : h))
+      );
+    }
+    setEditingItemId(null);
   };
 
   const handleAction = (action) => {
@@ -165,11 +229,11 @@ export default function App() {
   const totalStreamHeight = CANVAS_PAD_Y + TIMELINE_DAYS.length * ROW_HEIGHT + 120;
   const currentDayInfo = TIMELINE_DAYS[currentDay];
 
-  // Dynamically calculate habit rail width to ensure fit
-  const habitRailWidth = Math.max(128, habits.length * 36 + 24);
+  // Dynamic habit width based on count (at least 32px per habit lane + padding)
+  const habitRailWidth = Math.max(140, habits.length * 36 + 28);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#070707] text-white font-mono select-none overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-[#070707] text-white font-mono select-none overflow-hidden relative">
       
       {/* HEADER */}
       <header className="h-14 border-b border-white/10 bg-[#0a0a0a] flex items-center px-6 shrink-0 z-40 justify-between">
@@ -182,7 +246,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* CENTER CURRENT WEEK BUTTON */}
           <button
             onClick={() => centerCurrentWeek(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
@@ -192,7 +255,6 @@ export default function App() {
             <span>Focus Week</span>
           </button>
 
-          {/* SIMULATE DATE SHIFT */}
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
             <span className="text-[9px] font-black text-neutral-500 uppercase tracking-wider mr-1">Simulate:</span>
             <button 
@@ -206,15 +268,14 @@ export default function App() {
             <button 
               onClick={() => handleShiftDay(1)} 
               className="p-1 hover:bg-white/10 rounded transition-colors text-neutral-400 hover:text-white cursor-pointer"
-              title="Advance 1 day (Flows active tasks downward)"
+              title="Advance 1 day"
             >
               <FastForward size={12} />
             </button>
           </div>
 
-          {/* NEW TASK BUTTON */}
           <button
-            onClick={handleNewTaskPrompt}
+            onClick={handleOpenTaskModal}
             className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white text-black hover:bg-neutral-200 transition-colors text-[10px] font-black tracking-widest uppercase cursor-pointer"
           >
             <Plus size={14} strokeWidth={3} />
@@ -232,13 +293,32 @@ export default function App() {
           {/* Habits Header */}
           <div 
             style={{ width: `${habitRailWidth}px` }} 
-            className="border-r border-white/5 flex items-center justify-around px-2 shrink-0 relative group"
+            className="border-r border-white/5 flex items-center justify-around px-2 shrink-0 relative"
           >
             {habits.map((h) => (
-              <div key={h.id} className="relative group/h flex items-center justify-center">
-                <span className="text-[8px] tracking-wider text-neutral-500 group-hover/h:text-white font-black uppercase rotate-[-45deg] origin-bottom-left -translate-y-2 translate-x-2 transition-colors">
-                  {h.label}
-                </span>
+              <div 
+                key={h.id} 
+                className="relative group/h flex items-center justify-center cursor-pointer"
+                onDoubleClick={() => handleStartRename(h.id, h.label)}
+                title="Double click to rename"
+              >
+                {editingItemId === h.id ? (
+                  <input
+                    type="text"
+                    maxLength={5}
+                    value={editValue}
+                    autoFocus
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => handleSaveRename('habit', h.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveRename('habit', h.id)}
+                    className="w-12 bg-black border border-white/30 rounded px-1 text-[9px] text-center text-white outline-none"
+                  />
+                ) : (
+                  <span className="text-[8px] tracking-wider text-neutral-500 group-hover/h:text-white font-black uppercase rotate-[-45deg] origin-bottom-left -translate-y-2 translate-x-2 transition-colors">
+                    {h.label}
+                  </span>
+                )}
+                
                 <button
                   onClick={(e) => handleDeleteHabit(e, h.id)}
                   title={`Delete ${h.label}`}
@@ -249,7 +329,7 @@ export default function App() {
               </div>
             ))}
             <button
-              onClick={handleAddHabit}
+              onClick={handleOpenHabitModal}
               title="Add Habit Lane"
               className="ml-1 p-1 hover:bg-white/10 rounded text-neutral-500 hover:text-white transition-colors cursor-pointer"
             >
@@ -268,15 +348,32 @@ export default function App() {
               <div
                 key={task.id}
                 style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
-                className={`absolute h-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
-                  selectedTaskId === task.id ? 'text-white' : 'text-neutral-400'
+                onDoubleClick={() => handleStartRename(task.id, task.title)}
+                title="Double click to rename"
+                className={`absolute h-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors cursor-pointer ${
+                  selectedTaskId === task.id ? 'text-white' : 'text-neutral-400 hover:text-neutral-200'
                 }`}
               >
-                <span>{task.title}</span>
-                {task.streak > 0 && (
-                  <span className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
-                    🔥{task.streak}
-                  </span>
+                {editingItemId === task.id ? (
+                  <input
+                    type="text"
+                    maxLength={16}
+                    value={editValue}
+                    autoFocus
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => handleSaveRename('task', task.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveRename('task', task.id)}
+                    className="w-28 bg-black border border-white/30 rounded px-1.5 py-0.5 text-[10px] text-center text-white outline-none"
+                  />
+                ) : (
+                  <>
+                    <span>{task.title}</span>
+                    {task.streak > 0 && (
+                      <span className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
+                        🔥{task.streak}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             ))}
@@ -288,39 +385,53 @@ export default function App() {
           ref={scrollContainerRef}
           className="flex-1 overflow-y-auto overflow-x-hidden flex relative bg-[#050505] no-scrollbar"
         >
-          {/* Habit Rails */}
+          {/* Continuous Habit Rails with Merging Fluid Blocks */}
           <div 
             style={{ width: `${habitRailWidth}px`, height: `${totalStreamHeight}px` }} 
             className="border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative"
           >
-            {TIMELINE_DAYS.map((d) => (
-              <div 
-                key={d.dayIndex} 
-                style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }} 
-                className="absolute w-full flex items-center justify-around px-4"
-              >
-                {habits.map((habit) => {
-                  const isDone = habit.data[d.dayIndex];
-                  const isToday = d.dayIndex === currentDay;
-                  return (
+            {habits.map((habit, hIdx) => {
+              const blocks = parseHabitBlocks(habit.data);
+              const laneX = (habitRailWidth / (habits.length + 1)) * (hIdx + 1);
+
+              return (
+                <div key={habit.id} className="absolute inset-y-0" style={{ left: `${laneX - 8}px`, width: '16px' }}>
+                  {/* Guideline track */}
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-white/5 rounded-full" />
+
+                  {/* Render merged fluid capsules */}
+                  {blocks.map((b, bIdx) => {
+                    const top = CANVAS_PAD_Y + b.start * ROW_HEIGHT + 14;
+                    const height = b.days * ROW_HEIGHT - 28;
+                    return (
+                      <div
+                        key={bIdx}
+                        style={{ top: `${top}px`, height: `${height}px` }}
+                        className={`absolute left-1/2 -translate-x-1/2 w-[5px] rounded-full ${habit.color} shadow-[0_0_8px_${habit.hex}40] transition-all duration-200 pointer-events-none`}
+                      />
+                    );
+                  })}
+
+                  {/* Interactive hit areas per day for Today's row */}
+                  {TIMELINE_DAYS.map((d) => (
                     <div
-                      key={habit.id}
+                      key={d.dayIndex}
+                      style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }}
                       onClick={() => handleHabitClick(habit.id, d.dayIndex)}
-                      className={`relative h-full flex items-center justify-center w-4 ${
-                        isToday ? 'cursor-pointer' : 'cursor-default opacity-40'
+                      className={`absolute inset-x-0 flex items-center justify-center ${
+                        d.dayIndex === currentDay ? 'cursor-pointer' : 'cursor-default'
                       }`}
                     >
-                      <div className="absolute inset-y-1 w-[2px] bg-white/5 rounded-full" />
-                      <div
-                        className={`absolute w-[4px] rounded-full transition-all duration-300 ${
-                          isDone ? `h-10 ${habit.color} shadow-[0_0_10px_${habit.hex}40]` : 'h-0'
-                        }`}
-                      />
+                      {d.dayIndex === currentDay && (
+                        <div className={`w-3 h-3 rounded-full border border-dashed border-white/20 hover:border-white/50 transition-colors ${
+                          habit.data[d.dayIndex] ? 'opacity-0' : 'opacity-100'
+                        }`} />
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            ))}
+                  ))}
+                </div>
+              );
+            })}
           </div>
 
           {/* Dates Column */}
@@ -419,6 +530,176 @@ export default function App() {
           </button>
         </div>
       </footer>
+
+      {/* ========================================================= */}
+      {/* CENTER FLOATING CARD MODAL: CREATE NEW TASK */}
+      {/* ========================================================= */}
+      {taskModalOpen && (
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-widest text-white">Create Task Column</span>
+              <button 
+                onClick={() => setTaskModalOpen(false)}
+                className="text-neutral-500 hover:text-white transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTask} className="flex flex-col gap-4">
+              <div>
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Task Name</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Engine 3D..."
+                  value={taskForm.title}
+                  onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Color Accent</label>
+                <div className="flex items-center gap-2">
+                  {TASK_PALETTE.map((c, i) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => setTaskForm({ ...taskForm, colorIdx: i })}
+                      style={{ backgroundColor: c.hex }}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform cursor-pointer ${
+                        taskForm.colorIdx === i ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-black' : 'opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      {taskForm.colorIdx === i && <Check size={12} className="text-black stroke-[3]" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                  Slot Position (1 to {tasks.length + 1})
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={tasks.length + 1}
+                  value={taskForm.position}
+                  onChange={(e) => setTaskForm({ ...taskForm, position: e.target.value })}
+                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
+                />
+              </div>
+
+              <div className="flex gap-2.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setTaskModalOpen(false)}
+                  className="flex-1 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-neutral-400 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-lg bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                >
+                  Spawn Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* CENTER FLOATING CARD MODAL: CREATE NEW HABIT */}
+      {/* ========================================================= */}
+      {habitModalOpen && (
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-widest text-white">Create Habit Track</span>
+              <button 
+                onClick={() => setHabitModalOpen(false)}
+                className="text-neutral-500 hover:text-white transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateHabit} className="flex flex-col gap-4">
+              <div>
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                  Habit Label (Max 5 letters)
+                </label>
+                <input
+                  type="text"
+                  maxLength={5}
+                  required
+                  autoFocus
+                  placeholder="e.g. READ"
+                  value={habitForm.label}
+                  onChange={(e) => setHabitForm({ ...habitForm, label: e.target.value.toUpperCase() })}
+                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white uppercase outline-none focus:border-white/30"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Color Accent</label>
+                <div className="flex items-center gap-2">
+                  {HABIT_PALETTE.map((c, i) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => setHabitForm({ ...habitForm, colorIdx: i })}
+                      style={{ backgroundColor: c.hex }}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform cursor-pointer ${
+                        habitForm.colorIdx === i ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-black' : 'opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      {habitForm.colorIdx === i && <Check size={12} className="text-black stroke-[3]" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                  Slot Position (1 to {habits.length + 1})
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={habits.length + 1}
+                  value={habitForm.position}
+                  onChange={(e) => setHabitForm({ ...habitForm, position: e.target.value })}
+                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
+                />
+              </div>
+
+              <div className="flex gap-2.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setHabitModalOpen(false)}
+                  className="flex-1 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-neutral-400 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-lg bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                >
+                  Spawn Habit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
