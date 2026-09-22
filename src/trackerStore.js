@@ -23,36 +23,21 @@ export const TIMELINE_DAYS = Array.from({ length: 28 }, (_, i) => {
   };
 });
 
-export const HABIT_PALETTE = [
-  { name: 'Cyan', class: 'bg-cyan-400', hex: '#22d3ee' },
-  { name: 'Rose', class: 'bg-rose-400', hex: '#fb7185' },
-  { name: 'Emerald', class: 'bg-emerald-400', hex: '#34d399' },
-  { name: 'Amber', class: 'bg-amber-400', hex: '#fbbf24' },
-  { name: 'Purple', class: 'bg-purple-400', hex: '#c084fc' },
-  { name: 'Blue', class: 'bg-blue-400', hex: '#60a5fa' }
-];
-
-export const TASK_PALETTE = [
-  { name: 'Emerald', class: 'bg-emerald-400', hex: '#34d399' },
-  { name: 'Indigo', class: 'bg-indigo-400', hex: '#818cf8' },
-  { name: 'Amber', class: 'bg-amber-400', hex: '#fbbf24' },
-  { name: 'Rose', class: 'bg-rose-400', hex: '#fb7185' },
-  { name: 'Cyan', class: 'bg-cyan-400', hex: '#22d3ee' },
-  { name: 'Purple', class: 'bg-purple-400', hex: '#c084fc' },
-  { name: 'Orange', class: 'bg-orange-400', hex: '#fb923c' }
-];
+// Storage Keys
+const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v2';
+const STORAGE_HABITS_KEY = 'flow_tracker_habits_v2';
 
 export const INITIAL_HABITS = [
   { 
-    id: 'habit-1', label: 'CODE', color: 'bg-cyan-400', hex: '#22d3ee', 
+    id: 'habit-1', label: 'CODE', hex: '#22d3ee', 
     data: [1, 1, 1, 1, 1, 0, 0,  1, 1, 1, 1, 0, 1, 1,  1, 1, 1, 1, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   },
   { 
-    id: 'habit-2', label: 'GYM', color: 'bg-rose-400', hex: '#fb7185', 
+    id: 'habit-2', label: 'GYM', hex: '#fb7185', 
     data: [0, 1, 0, 1, 1, 0, 0,  0, 1, 0, 1, 1, 0, 0,  0, 1, 0, 1, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   },
   { 
-    id: 'habit-3', label: 'DIET', color: 'bg-emerald-400', hex: '#34d399', 
+    id: 'habit-3', label: 'DIET', hex: '#34d399', 
     data: [1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 0, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   }
 ];
@@ -61,9 +46,10 @@ export const INITIAL_TASKS = [
   {
     id: 'col-1',
     title: '2D Animation',
-    colorClass: 'bg-emerald-400',
     hex: '#34d399',
     streak: 3,
+    isArchived: false,
+    nameHistory: [{ title: '2D Animation', at: 'Init' }],
     matrix: [
       0, 1, 1, 1, 0, 0, 0,
       0, 1, 1, 1, 0, 0, 0,
@@ -74,17 +60,19 @@ export const INITIAL_TASKS = [
   {
     id: 'col-2',
     title: 'Motor Design',
-    colorClass: 'bg-indigo-400',
     hex: '#818cf8',
     streak: 0,
+    isArchived: false,
+    nameHistory: [{ title: 'Motor Design', at: 'Init' }],
     matrix: new Array(28).fill(0),
   },
   {
     id: 'col-3',
     title: '3D Animation',
-    colorClass: 'bg-amber-400',
     hex: '#fbbf24',
     streak: 5,
+    isArchived: false,
+    nameHistory: [{ title: '3D Modeling', at: '2026-09-10' }, { title: '3D Animation', at: '2026-09-15' }],
     matrix: [
       1, 1, 0, 0, 1, 1, 0,
       1, 1, 0, 0, 1, 1, 0,
@@ -94,7 +82,37 @@ export const INITIAL_TASKS = [
   },
 ];
 
-// Parser for continuous habit chains
+// Local Storage Loaders
+export function loadPersistedTasks() {
+  try {
+    const saved = localStorage.getItem(STORAGE_TASKS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error('Failed to load persisted tasks', e);
+  }
+  return INITIAL_TASKS;
+}
+
+export function loadPersistedHabits() {
+  try {
+    const saved = localStorage.getItem(STORAGE_HABITS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error('Failed to load persisted habits', e);
+  }
+  return INITIAL_HABITS;
+}
+
+export function persistState(tasks, habits) {
+  try {
+    localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(tasks));
+    localStorage.setItem(STORAGE_HABITS_KEY, JSON.stringify(habits));
+  } catch (e) {
+    console.error('Persistence failed', e);
+  }
+}
+
+// Data Parsing Engine
 export function parseHabitBlocks(habitData) {
   const blocks = [];
   let start = null;
@@ -208,14 +226,29 @@ export function toggleHabitToday(habits, habitId, dayIndex, currentDay) {
   });
 }
 
-// Splice insertion functions with arbitrary positional placement
-export function insertNewTask(tasks, { title, colorObj, position }, totalDays) {
+// Renaming with historical audit log
+export function renameTask(tasks, taskId, newTitle) {
+  const trimmed = newTitle.trim();
+  return tasks.map((t) => {
+    if (t.id !== taskId || !trimmed || t.title === trimmed) return t;
+    const history = t.nameHistory || [];
+    return {
+      ...t,
+      title: trimmed,
+      nameHistory: [...history, { title: trimmed, at: new Date().toISOString().split('T')[0] }]
+    };
+  });
+}
+
+// Insertion & Vault Restorations
+export function insertNewTask(tasks, { title, hex, position }, totalDays) {
   const newTask = {
     id: `col-${Date.now()}`,
     title: title.trim().substring(0, 16),
-    colorClass: colorObj.class,
-    hex: colorObj.hex,
+    hex: hex || '#34d399',
     streak: 0,
+    isArchived: false,
+    nameHistory: [{ title: title.trim(), at: new Date().toISOString().split('T')[0] }],
     matrix: new Array(totalDays).fill(0),
   };
 
@@ -225,12 +258,11 @@ export function insertNewTask(tasks, { title, colorObj, position }, totalDays) {
   return copy;
 }
 
-export function insertNewHabit(habits, { label, colorObj, position }, totalDays) {
+export function insertNewHabit(habits, { label, hex, position }, totalDays) {
   const newHabit = {
     id: `habit-${Date.now()}`,
     label: label.trim().substring(0, 5).toUpperCase(),
-    color: colorObj.class,
-    hex: colorObj.hex,
+    hex: hex || '#22d3ee',
     data: new Array(totalDays).fill(0),
   };
 

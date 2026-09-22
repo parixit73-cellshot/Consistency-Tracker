@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, Trash2, X, Check } from 'lucide-react';
+import { 
+  Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, 
+  Trash2, X, Archive, Download, Upload, ShieldAlert, RefreshCw, History 
+} from 'lucide-react';
 import {
   ROW_HEIGHT,
   TRACK_WIDTH,
@@ -7,16 +10,16 @@ import {
   CANVAS_PAD_Y,
   BASE_CURRENT_DAY_INDEX,
   TIMELINE_DAYS,
-  HABIT_PALETTE,
-  TASK_PALETTE,
-  INITIAL_HABITS,
-  INITIAL_TASKS,
+  loadPersistedTasks,
+  loadPersistedHabits,
+  persistState,
   getColLeft,
   parseHabitBlocks,
   parseTaskMatrix,
   executeMatrixAction,
   shiftCurrentDay,
   toggleHabitToday,
+  renameTask,
   insertNewTask,
   insertNewHabit,
 } from './trackerStore';
@@ -70,8 +73,13 @@ function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask, currentDay }) 
               return (
                 <div
                   key={cIdx}
-                  style={{ top: `${top}px`, height: `${height}px` }}
-                  className={`absolute w-[3px] opacity-70 ${task.colorClass} shadow-[0_0_12px_${task.hex}60] pointer-events-none`}
+                  style={{ 
+                    top: `${top}px`, 
+                    height: `${height}px`,
+                    backgroundColor: task.hex,
+                    boxShadow: `0 0 12px ${task.hex}80`
+                  }}
+                  className="absolute w-[3px] opacity-70 pointer-events-none"
                 />
               );
             })}
@@ -84,10 +92,15 @@ function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask, currentDay }) 
               return (
                 <div
                   key={bIdx}
-                  style={{ top: `${top}px`, height: `${height}px`, width: `${TRACK_WIDTH}px` }}
-                  className={`absolute rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center ${task.colorClass} pointer-events-none transition-all duration-200`}
+                  style={{ 
+                    top: `${top}px`, 
+                    height: `${height}px`, 
+                    width: `${TRACK_WIDTH}px`,
+                    backgroundColor: task.hex
+                  }}
+                  className="absolute rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center pointer-events-none transition-all duration-200"
                 >
-                  <span className="text-[10px] font-black text-black/60 rotate-90">{block.days}d</span>
+                  <span className="text-[10px] font-black text-black/70 rotate-90">{block.days}d</span>
                 </div>
               );
             })}
@@ -99,23 +112,33 @@ function DynamicFluidLayer({ tasks, selectedTaskId, onSelectTask, currentDay }) 
 }
 
 export default function App() {
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
-  const [habits, setHabits] = useState(INITIAL_HABITS);
+  const [tasks, setTasks] = useState(loadPersistedTasks);
+  const [habits, setHabits] = useState(loadPersistedHabits);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [currentDay, setCurrentDay] = useState(BASE_CURRENT_DAY_INDEX);
 
-  // Modals state
+  // Modals & Panels
   const [taskModalOpen, setTaskModalOpen] = useState(false);
-  const [taskForm, setTaskForm] = useState({ title: '', colorIdx: 0, position: 1 });
+  const [taskForm, setTaskForm] = useState({ title: '', hex: '#34d399', position: 1 });
 
   const [habitModalOpen, setHabitModalOpen] = useState(false);
-  const [habitForm, setHabitForm] = useState({ label: '', colorIdx: 0, position: 1 });
+  const [habitForm, setHabitForm] = useState({ label: '', hex: '#22d3ee', position: 1 });
+
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [purgeConfirmId, setPurgeConfirmId] = useState(null);
+  const [purgeInputText, setPurgeInputText] = useState('');
 
   // Inline editing state
   const [editingItemId, setEditingItemId] = useState(null);
   const [editValue, setEditValue] = useState('');
   
   const scrollContainerRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  // Real-time State Auto-Sync
+  useEffect(() => {
+    persistState(tasks, habits);
+  }, [tasks, habits]);
 
   const centerCurrentWeek = (smooth = true) => {
     if (!scrollContainerRef.current) return;
@@ -131,9 +154,13 @@ export default function App() {
     centerCurrentWeek(false);
   }, []);
 
-  // --- TASK ACTIONS ---
+  // Filter Active vs Archived Tasks
+  const activeTasks = tasks.filter((t) => !t.isArchived);
+  const archivedTasks = tasks.filter((t) => t.isArchived);
+
+  // --- ACTIONS ---
   const handleOpenTaskModal = () => {
-    setTaskForm({ title: '', colorIdx: tasks.length % TASK_PALETTE.length, position: tasks.length + 1 });
+    setTaskForm({ title: '', hex: '#34d399', position: activeTasks.length + 1 });
     setTaskModalOpen(true);
   };
 
@@ -145,7 +172,7 @@ export default function App() {
         prev,
         {
           title: taskForm.title,
-          colorObj: TASK_PALETTE[taskForm.colorIdx],
+          hex: taskForm.hex,
           position: parseInt(taskForm.position, 10),
         },
         TIMELINE_DAYS.length
@@ -154,15 +181,27 @@ export default function App() {
     setTaskModalOpen(false);
   };
 
-  const handleDeleteTask = (taskId) => {
-    if (!taskId) return;
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+  // Safe Deletion: Move to Vault
+  const handleArchiveTask = (taskId) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isArchived: true } : t)));
     if (selectedTaskId === taskId) setSelectedTaskId(null);
   };
 
-  // --- HABIT ACTIONS ---
+  // Safe Restoration: Respawn from Vault
+  const handleRestoreTask = (taskId) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isArchived: false } : t)));
+  };
+
+  // Hard Delete: Purge with typed confirmation
+  const handleHardPurgeTask = (taskId) => {
+    if (purgeInputText !== 'DELETE') return;
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    setPurgeConfirmId(null);
+    setPurgeInputText('');
+  };
+
   const handleOpenHabitModal = () => {
-    setHabitForm({ label: '', colorIdx: habits.length % HABIT_PALETTE.length, position: habits.length + 1 });
+    setHabitForm({ label: '', hex: '#22d3ee', position: habits.length + 1 });
     setHabitModalOpen(true);
   };
 
@@ -174,7 +213,7 @@ export default function App() {
         prev,
         {
           label: habitForm.label,
-          colorObj: HABIT_PALETTE[habitForm.colorIdx],
+          hex: habitForm.hex,
           position: parseInt(habitForm.position, 10),
         },
         TIMELINE_DAYS.length
@@ -192,7 +231,6 @@ export default function App() {
     setHabits((prev) => toggleHabitToday(prev, habitId, dayIndex, currentDay));
   };
 
-  // --- INLINE EDITING ---
   const handleStartRename = (id, currentTitle) => {
     setEditingItemId(id);
     setEditValue(currentTitle);
@@ -200,9 +238,7 @@ export default function App() {
 
   const handleSaveRename = (type, id) => {
     if (type === 'task') {
-      setTasks((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, title: editValue.trim() || t.title } : t))
-      );
+      setTasks((prev) => renameTask(prev, id, editValue));
     } else {
       setHabits((prev) =>
         prev.map((h) => (h.id === id ? { ...h, label: (editValue.trim() || h.label).substring(0, 5).toUpperCase() } : h))
@@ -224,12 +260,39 @@ export default function App() {
     }
   };
 
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
+  // Full Backup Export / Import
+  const handleExportBackup = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ tasks, habits }));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `flow_tracker_backup_${Date.now()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleImportBackup = (e) => {
+    const fileReader = new FileReader();
+    fileReader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        if (parsed.tasks && parsed.habits) {
+          setTasks(parsed.tasks);
+          setHabits(parsed.habits);
+        }
+      } catch (err) {
+        console.error('Invalid backup JSON', err);
+      }
+    };
+    if (e.target.files[0]) {
+      fileReader.readAsText(e.target.files[0]);
+    }
+  };
+
+  const selectedTask = activeTasks.find((t) => t.id === selectedTaskId);
   const todayStatus = selectedTask ? selectedTask.matrix[currentDay] : 0;
   const totalStreamHeight = CANVAS_PAD_Y + TIMELINE_DAYS.length * ROW_HEIGHT + 120;
   const currentDayInfo = TIMELINE_DAYS[currentDay];
-
-  // Dynamic habit width based on count (at least 32px per habit lane + padding)
   const habitRailWidth = Math.max(140, habits.length * 36 + 28);
 
   return (
@@ -246,21 +309,22 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* FOCUS CURRENT WEEK */}
           <button
             onClick={() => centerCurrentWeek(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
-            title="Recenter view to current week (Sun–Sat)"
+            title="Recenter view to current week"
           >
             <LocateFixed size={13} />
             <span>Focus Week</span>
           </button>
 
+          {/* SIMULATE DATE SHIFT */}
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
             <span className="text-[9px] font-black text-neutral-500 uppercase tracking-wider mr-1">Simulate:</span>
             <button 
               onClick={() => handleShiftDay(-1)} 
               className="p-1 hover:bg-white/10 rounded transition-colors text-neutral-400 hover:text-white cursor-pointer"
-              title="Go back 1 day"
             >
               <Rewind size={12} />
             </button>
@@ -268,9 +332,43 @@ export default function App() {
             <button 
               onClick={() => handleShiftDay(1)} 
               className="p-1 hover:bg-white/10 rounded transition-colors text-neutral-400 hover:text-white cursor-pointer"
-              title="Advance 1 day"
             >
               <FastForward size={12} />
+            </button>
+          </div>
+
+          {/* BACKUP & RESTORE */}
+          <div className="flex items-center gap-1 border-l border-white/10 pl-3">
+            <button
+              onClick={handleExportBackup}
+              className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              title="Export Snapshot (JSON)"
+            >
+              <Download size={14} />
+            </button>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleImportBackup} 
+              accept=".json" 
+              className="hidden" 
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              title="Import Snapshot (JSON)"
+            >
+              <Upload size={14} />
+            </button>
+            <button
+              onClick={() => setVaultOpen(true)}
+              className="relative p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              title="Open Vault (Archived Tasks)"
+            >
+              <Archive size={14} />
+              {archivedTasks.length > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500" />
+              )}
             </button>
           </div>
 
@@ -342,9 +440,9 @@ export default function App() {
             <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
           </div>
 
-          {/* Task Column Headers */}
+          {/* Active Task Column Headers */}
           <div className="flex-1 relative overflow-hidden min-w-max">
-            {tasks.map((task, idx) => (
+            {activeTasks.map((task, idx) => (
               <div
                 key={task.id}
                 style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
@@ -385,7 +483,7 @@ export default function App() {
           ref={scrollContainerRef}
           className="flex-1 overflow-y-auto overflow-x-hidden flex relative bg-[#050505] no-scrollbar"
         >
-          {/* Continuous Habit Rails with Merging Fluid Blocks */}
+          {/* Merged Continuous Habit Rails */}
           <div 
             style={{ width: `${habitRailWidth}px`, height: `${totalStreamHeight}px` }} 
             className="border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative"
@@ -396,23 +494,25 @@ export default function App() {
 
               return (
                 <div key={habit.id} className="absolute inset-y-0" style={{ left: `${laneX - 8}px`, width: '16px' }}>
-                  {/* Guideline track */}
                   <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-white/5 rounded-full" />
 
-                  {/* Render merged fluid capsules */}
                   {blocks.map((b, bIdx) => {
                     const top = CANVAS_PAD_Y + b.start * ROW_HEIGHT + 14;
                     const height = b.days * ROW_HEIGHT - 28;
                     return (
                       <div
                         key={bIdx}
-                        style={{ top: `${top}px`, height: `${height}px` }}
-                        className={`absolute left-1/2 -translate-x-1/2 w-[5px] rounded-full ${habit.color} shadow-[0_0_8px_${habit.hex}40] transition-all duration-200 pointer-events-none`}
+                        style={{ 
+                          top: `${top}px`, 
+                          height: `${height}px`,
+                          backgroundColor: habit.hex,
+                          boxShadow: `0 0 8px ${habit.hex}60`
+                        }}
+                        className="absolute left-1/2 -translate-x-1/2 w-[5px] rounded-full transition-all duration-200 pointer-events-none"
                       />
                     );
                   })}
 
-                  {/* Interactive hit areas per day for Today's row */}
                   {TIMELINE_DAYS.map((d) => (
                     <div
                       key={d.dayIndex}
@@ -460,7 +560,7 @@ export default function App() {
           <div className="flex-1 relative min-w-max" style={{ height: `${totalStreamHeight}px` }}>
             <StaticGridWires currentDay={currentDay} />
             <DynamicFluidLayer 
-              tasks={tasks} 
+              tasks={activeTasks} 
               selectedTaskId={selectedTaskId} 
               onSelectTask={setSelectedTaskId} 
               currentDay={currentDay}
@@ -479,12 +579,12 @@ export default function App() {
           </span>
           {selectedTask && (
             <button
-              onClick={() => handleDeleteTask(selectedTask.id)}
-              className="flex items-center gap-1.5 ml-4 px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
-              title="Delete task lane entirely"
+              onClick={() => handleArchiveTask(selectedTask.id)}
+              className="flex items-center gap-1.5 ml-4 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
+              title="Archive column (Safely stores data into Vault)"
             >
-              <Trash2 size={12} />
-              <span>Delete Column</span>
+              <Archive size={12} />
+              <span>Archive Task</span>
             </button>
           )}
         </div>
@@ -532,7 +632,7 @@ export default function App() {
       </footer>
 
       {/* ========================================================= */}
-      {/* CENTER FLOATING CARD MODAL: CREATE NEW TASK */}
+      {/* FLOATING CARD MODAL: CREATE TASK (Free Color Wheel) */}
       {/* ========================================================= */}
       {taskModalOpen && (
         <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -554,40 +654,35 @@ export default function App() {
                   type="text"
                   required
                   autoFocus
-                  placeholder="e.g. Engine 3D..."
+                  placeholder="e.g. Mechanical Rig..."
                   value={taskForm.title}
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
                   className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
                 />
               </div>
 
+              {/* NATIVE COLOR CIRCLE PICKER */}
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Color Accent</label>
-                <div className="flex items-center gap-2">
-                  {TASK_PALETTE.map((c, i) => (
-                    <button
-                      key={c.name}
-                      type="button"
-                      onClick={() => setTaskForm({ ...taskForm, colorIdx: i })}
-                      style={{ backgroundColor: c.hex }}
-                      className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform cursor-pointer ${
-                        taskForm.colorIdx === i ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-black' : 'opacity-70 hover:opacity-100'
-                      }`}
-                    >
-                      {taskForm.colorIdx === i && <Check size={12} className="text-black stroke-[3]" />}
-                    </button>
-                  ))}
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Fluid Color (Free Wheel)</label>
+                <div className="flex items-center gap-3 bg-[#141414] p-2 rounded-lg border border-white/10">
+                  <input
+                    type="color"
+                    value={taskForm.hex}
+                    onChange={(e) => setTaskForm({ ...taskForm, hex: e.target.value })}
+                    className="w-9 h-9 rounded-full cursor-pointer bg-transparent border-none outline-none"
+                  />
+                  <span className="text-xs font-mono uppercase text-white font-bold">{taskForm.hex}</span>
                 </div>
               </div>
 
               <div>
                 <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
-                  Slot Position (1 to {tasks.length + 1})
+                  Position Slot (1 to {activeTasks.length + 1})
                 </label>
                 <input
                   type="number"
                   min={1}
-                  max={tasks.length + 1}
+                  max={activeTasks.length + 1}
                   value={taskForm.position}
                   onChange={(e) => setTaskForm({ ...taskForm, position: e.target.value })}
                   className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
@@ -615,7 +710,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* CENTER FLOATING CARD MODAL: CREATE NEW HABIT */}
+      {/* FLOATING CARD MODAL: CREATE HABIT (Free Color Wheel) */}
       {/* ========================================================= */}
       {habitModalOpen && (
         <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -648,27 +743,21 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Color Accent</label>
-                <div className="flex items-center gap-2">
-                  {HABIT_PALETTE.map((c, i) => (
-                    <button
-                      key={c.name}
-                      type="button"
-                      onClick={() => setHabitForm({ ...habitForm, colorIdx: i })}
-                      style={{ backgroundColor: c.hex }}
-                      className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform cursor-pointer ${
-                        habitForm.colorIdx === i ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-black' : 'opacity-70 hover:opacity-100'
-                      }`}
-                    >
-                      {habitForm.colorIdx === i && <Check size={12} className="text-black stroke-[3]" />}
-                    </button>
-                  ))}
+                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">Track Color (Free Wheel)</label>
+                <div className="flex items-center gap-3 bg-[#141414] p-2 rounded-lg border border-white/10">
+                  <input
+                    type="color"
+                    value={habitForm.hex}
+                    onChange={(e) => setHabitForm({ ...habitForm, hex: e.target.value })}
+                    className="w-9 h-9 rounded-full cursor-pointer bg-transparent border-none outline-none"
+                  />
+                  <span className="text-xs font-mono uppercase text-white font-bold">{habitForm.hex}</span>
                 </div>
               </div>
 
               <div>
                 <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
-                  Slot Position (1 to {habits.length + 1})
+                  Position Slot (1 to {habits.length + 1})
                 </label>
                 <input
                   type="number"
@@ -696,6 +785,114 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* THE VAULT DRAWER (Soft-Deleted Tasks & Name History) */}
+      {/* ========================================================= */}
+      {vaultOpen && (
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-end">
+          <div className="w-full max-w-md bg-[#0a0a0a] border-l border-white/10 h-full p-6 flex flex-col justify-between shadow-2xl">
+            <div>
+              <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <Archive size={16} className="text-amber-400" />
+                  <span className="text-xs font-black uppercase tracking-widest text-white">Task Archive Vault</span>
+                </div>
+                <button onClick={() => setVaultOpen(false)} className="text-neutral-500 hover:text-white transition-colors cursor-pointer">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-180px)] pr-2">
+                {archivedTasks.length === 0 ? (
+                  <div className="text-center py-12 text-neutral-600 text-xs tracking-wider uppercase font-bold">
+                    No archived tasks in the vault.
+                  </div>
+                ) : (
+                  archivedTasks.map((t) => {
+                    const loggedDays = t.matrix.filter((v) => v > 0).length;
+
+                    return (
+                      <div key={t.id} className="bg-[#121212] border border-white/10 rounded-xl p-4 flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.hex }} />
+                            <span className="text-xs font-black text-white uppercase">{t.title}</span>
+                          </div>
+                          <span className="text-[10px] text-neutral-500 font-bold">{loggedDays} Days Total</span>
+                        </div>
+
+                        {/* Audit Log / Name History */}
+                        {t.nameHistory && t.nameHistory.length > 1 && (
+                          <div className="bg-black/40 p-2 rounded text-[9px] text-neutral-400 flex flex-col gap-1">
+                            <span className="font-bold text-neutral-500 flex items-center gap-1">
+                              <History size={10} /> Name History:
+                            </span>
+                            {t.nameHistory.map((h, i) => (
+                              <span key={i} className="pl-3 border-l border-white/10">
+                                • {h.title} <span className="text-neutral-600">({h.at})</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                          <button
+                            onClick={() => handleRestoreTask(t.id)}
+                            className="flex items-center gap-1.5 px-3 py-1 rounded bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                          >
+                            <RefreshCw size={11} />
+                            <span>Respawn</span>
+                          </button>
+
+                          {purgeConfirmId === t.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Type DELETE"
+                                autoFocus
+                                value={purgeInputText}
+                                onChange={(e) => setPurgeInputText(e.target.value)}
+                                className="w-24 bg-black border border-red-500/50 rounded px-1.5 py-0.5 text-[9px] text-red-300 outline-none uppercase"
+                              />
+                              <button
+                                onClick={() => handleHardPurgeTask(t.id)}
+                                disabled={purgeInputText !== 'DELETE'}
+                                className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-colors ${
+                                  purgeInputText === 'DELETE' ? 'bg-red-600 text-white cursor-pointer' : 'bg-red-950/40 text-red-500/40 cursor-default'
+                                }`}
+                              >
+                                Purge
+                              </button>
+                              <button onClick={() => setPurgeConfirmId(null)} className="text-neutral-500 hover:text-white text-xs">
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setPurgeConfirmId(t.id);
+                                setPurgeInputText('');
+                              }}
+                              className="text-red-400 hover:text-red-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
+                            >
+                              Hard Erase
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-white/10 text-[9px] text-neutral-500 leading-relaxed">
+              Archived tasks retain all historical days, streaks, and umbilical connections. They are safely removed from the active canvas without altering coordinates.
+            </div>
           </div>
         </div>
       )}
