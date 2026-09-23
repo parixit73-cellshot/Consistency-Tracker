@@ -17,7 +17,7 @@ import {
   renameTask,
   renameHabit,
   updateTaskColor,
-  updateTaskNotes,
+  updateBlockNote,
   insertNewTask,
   insertNewHabit,
 } from './trackerStore';
@@ -26,6 +26,7 @@ import { Header, FooterControls } from './components/Header';
 import { TimelineStream } from './components/TimelineStream';
 import { TaskModal, HabitModal, NameHistoryModal } from './components/Modals';
 import { ImportInspectorModal, RevisionsModal, VaultDrawer } from './components/BackupVaultModals';
+import { BlockNoteModal } from './components/TaskNotesCallout';
 
 export default function App() {
   const [tasks, setTasks] = useState(loadPersistedTasks);
@@ -43,6 +44,9 @@ export default function App() {
   const [vaultOpen, setVaultOpen] = useState(false);
   const [historyModalTask, setHistoryModalTask] = useState(null);
   const [revisionsModalOpen, setRevisionsModalOpen] = useState(false);
+
+  // Block Resume Note Modal State
+  const [activeNoteModal, setActiveNoteModal] = useState(null); // { task, block }
 
   const [importFilePayload, setImportFilePayload] = useState(null);
   const [selectedImportTaskIds, setSelectedImportTaskIds] = useState(new Set());
@@ -172,9 +176,10 @@ export default function App() {
     setImportFilePayload(null);
   };
 
-  const handleSaveNotes = useCallback((taskId, content, fontSize) => {
-    setTasks((prev) => updateTaskNotes(prev, taskId, content, fontSize));
-  }, []);
+  const handleSaveBlockNote = (noteData) => {
+    if (!activeNoteModal) return;
+    setTasks((prev) => updateBlockNote(prev, activeNoteModal.task.id, activeNoteModal.block.start, noteData));
+  };
 
   const selectedTask = activeTasks.find((t) => t.id === selectedTaskId);
   const todayStatus = selectedTask ? selectedTask.matrix[currentDay] : 0;
@@ -282,7 +287,7 @@ export default function App() {
           setHabits((prevH) => renameHabit(prevH, id, newLabel));
           return prev;
         })}
-        onSaveTaskNotes={handleSaveNotes}
+        onOpenBlockNote={(task, block) => setActiveNoteModal({ task, block })}
         onOpenHistory={setHistoryModalTask}
       />
 
@@ -298,7 +303,16 @@ export default function App() {
         }}
       />
 
-      {/* MODALS & DRAWERS */}
+      {/* BLOCK RESUME CONTEXT MODAL */}
+      <BlockNoteModal
+        isOpen={Boolean(activeNoteModal)}
+        onClose={() => setActiveNoteModal(null)}
+        taskTitle={activeNoteModal?.task.title}
+        initialNote={activeNoteModal?.block.note}
+        onSave={handleSaveBlockNote}
+      />
+
+      {/* OTHER MODALS */}
       <TaskModal
         isOpen={taskModalOpen}
         onClose={() => setTaskModalOpen(false)}

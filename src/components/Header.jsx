@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, 
-  Archive, Download, Upload, Palette, Layers 
+  Archive, Download, Upload, Palette, Layers, FileText 
 } from 'lucide-react';
 
 export function Header({
@@ -108,7 +108,8 @@ export function FooterControls({
   todayStatus,
   onColorChange,
   onArchiveTask,
-  onAction
+  onAction,
+  onOpenNotes
 }) {
   return (
     <footer className="h-16 border-t border-white/10 bg-[#0a0a0a] flex items-center justify-between px-8 shrink-0 z-40">
@@ -133,7 +134,7 @@ export function FooterControls({
             <button
               onClick={() => onArchiveTask(selectedTask.id)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
-              title="Archive column into vault"
+              title="Archive column into vault (Delete key)"
             >
               <Archive size={12} />
               <span>Archive</span>
@@ -142,7 +143,22 @@ export function FooterControls({
         )}
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex items-center gap-3">
+        {/* Note Trigger Button */}
+        <button
+          disabled={!selectedTask}
+          onClick={onOpenNotes}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-bold tracking-wider uppercase transition-colors border ${
+            !selectedTask
+              ? 'border-white/5 text-white/20 cursor-default'
+              : 'border-white/20 hover:border-white/50 text-white bg-white/5 hover:bg-white/10 cursor-pointer'
+          }`}
+          title="Open block notes (Hotkey: N)"
+        >
+          <FileText size={12} className={selectedTask ? 'text-amber-400' : ''} />
+          <span>Note <span className="opacity-50 text-[9px]">(N)</span></span>
+        </button>
+
         <button
           disabled={!selectedTask || todayStatus === 2}
           onClick={() => onAction('START')}
