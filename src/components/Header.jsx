@@ -1,13 +1,11 @@
-import React from 'react';
 import { 
-  Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, 
+  Plus, Play, Square, RotateCcw, LocateFixed, 
   Archive, Download, Upload, Palette, Layers 
 } from 'lucide-react';
 
 export function Header({
   currentDayInfo,
   onCenterWeek,
-  onShiftDay,
   onExportBackup,
   onTriggerFileInput,
   onOpenRevisions,
@@ -37,26 +35,7 @@ export function Header({
           <LocateFixed size={13} />
           <span>Focus Week</span>
         </button>
-
-        <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
-          <span className="text-[9px] font-black text-neutral-500 uppercase tracking-wider mr-1">Simulate:</span>
-          <button 
-            onClick={() => onShiftDay(-1)} 
-            className="p-1 hover:bg-white/10 rounded transition-colors text-neutral-400 hover:text-white cursor-pointer"
-          >
-            <Rewind size={12} />
-          </button>
-          <span className={`text-[10px] font-bold px-1 ${currentDayInfo.isSunday ? 'text-amber-400' : 'text-white'}`}>
-            {currentDayInfo.dateStr}
-          </span>
-          <button 
-            onClick={() => onShiftDay(1)} 
-            className="p-1 hover:bg-white/10 rounded transition-colors text-neutral-400 hover:text-white cursor-pointer"
-          >
-            <FastForward size={12} />
-          </button>
-        </div>
-
+        
         <div className="flex items-center gap-1 border-l border-white/10 pl-3">
           <button
             onClick={onExportBackup}

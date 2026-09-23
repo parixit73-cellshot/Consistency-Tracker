@@ -5,7 +5,6 @@ import {
   TRACK_WIDTH, 
   COLUMN_WIDTH, 
   CANVAS_PAD_Y, 
-  TIMELINE_DAYS, 
   getColLeft, 
   parseHabitBlocks, 
   parseTaskMatrix 
@@ -13,9 +12,10 @@ import {
 
 export function TimelineStream({
   scrollRef,
+  timelineDays,
+  todayIso,
   tasks,
   habits,
-  currentDay,
   selectedTaskId,
   onSelectTask,
   onHabitClick,
@@ -30,9 +30,7 @@ export function TimelineStream({
   onRenameHabit,
   onOpenHistory
 }) {
-  const totalStreamHeight = CANVAS_PAD_Y + TIMELINE_DAYS.length * ROW_HEIGHT + 120;
-  
-  // Nudge out the habit rail width so the '+' button has ample breathing room
+  const totalStreamHeight = CANVAS_PAD_Y + timelineDays.length * ROW_HEIGHT + 120;
   const habitRailWidth = Math.max(160, habits.length * 38 + 48);
 
   const [activeHabitPopover, setActiveHabitPopover] = useState(null);
@@ -78,9 +76,8 @@ export function TimelineStream({
             const firstLetter = (h.label || '?').charAt(0).toUpperCase();
             const isStaggered = idx % 2 === 1;
             const isPopoverOpen = activeHabitPopover === h.id;
-            const completedCount = h.data?.filter(Boolean).length || 0;
+            const completedCount = Object.values(h.data || {}).filter((v) => v === 1).length;
             const pastNames = (h.nameHistory || []).slice(-4, -1).reverse();
-            // Offset calculations dedicated to habit circles
             const laneX = 20 + idx * 38;
 
             return (
@@ -103,13 +100,13 @@ export function TimelineStream({
                 </button>
 
                 {isPopoverOpen && (
-                  <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
+                  <div className="absolute top-8 left-1/2 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
                     <div className="flex items-center justify-between">
                       {habitInlineEdit ? (
                         <div className="flex items-center gap-1 w-full mr-2">
                           <input
                             type="text"
-                            maxLength={8}
+                            maxLength={16}
                             autoFocus
                             value={habitInputValue}
                             onChange={(e) => setHabitInputValue(e.target.value)}
@@ -156,7 +153,7 @@ export function TimelineStream({
                     {pastNames.length > 0 && (
                       <div className="pt-2 border-t border-white/5 flex flex-col gap-1">
                         <span className="text-[8px] uppercase tracking-wider font-bold text-neutral-500">
-                          Past Names (Up to 3):
+                          Past Names:
                         </span>
                         {pastNames.map((item, nIdx) => (
                           <div key={nIdx} className="text-[9px] text-neutral-400 flex justify-between">
@@ -172,11 +169,10 @@ export function TimelineStream({
             );
           })}
 
-          {/* Nudged-out '+' button with safe spacing */}
           <button
             onClick={onOpenHabitModal}
             title="Add Habit Lane"
-            style={{ left: `${20 + habits.length * 38 - 10}px` }}
+            style={{ left: `${20 + habits.length * 38 + 6}px` }}
             className="absolute top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/10 rounded-full text-neutral-500 hover:text-white transition-colors cursor-pointer border border-dashed border-white/10 hover:border-white/30"
           >
             <Plus size={11} />
@@ -243,7 +239,9 @@ export function TimelineStream({
                     🔥 {task.streak}
                   </span>
                 ) : (
-                  <span className="text-[9px] text-neutral-600 tracking-wider font-mono">0d</span>
+                  <span className="text-[9px] text-neutral-600 tracking-wider font-mono">
+                    {Object.values(task.matrix || {}).filter((v) => v > 0).length}d
+                  </span>
                 )}
               </div>
             </div>
@@ -262,7 +260,7 @@ export function TimelineStream({
           className="border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative"
         >
           {habits.map((habit, hIdx) => {
-            const blocks = parseHabitBlocks(habit.data || []);
+            const blocks = parseHabitBlocks(habit.data || {}, timelineDays);
             const laneX = 20 + hIdx * 38;
 
             return (
@@ -286,22 +284,27 @@ export function TimelineStream({
                   );
                 })}
 
-                {TIMELINE_DAYS.map((d) => (
-                  <div
-                    key={d.dayIndex}
-                    style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }}
-                    onClick={() => onHabitClick(habit.id, d.dayIndex)}
-                    className={`absolute inset-x-0 flex items-center justify-center ${
-                      d.dayIndex === currentDay ? 'cursor-pointer' : 'cursor-default'
-                    }`}
-                  >
-                    {d.dayIndex === currentDay && (
-                      <div className={`w-3 h-3 rounded-full border border-dashed border-white/20 hover:border-white/50 transition-colors ${
-                        habit.data?.[d.dayIndex] ? 'opacity-0' : 'opacity-100'
-                      }`} />
-                    )}
-                  </div>
-                ))}
+                {timelineDays.map((d) => {
+                  const isToday = d.isoDate === todayIso;
+                  const isTicked = habit.data?.[d.isoDate] === 1;
+
+                  return (
+                    <div
+                      key={d.isoDate}
+                      style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }}
+                      onClick={() => onHabitClick(habit.id, d.isoDate)}
+                      className={`absolute inset-x-0 flex items-center justify-center ${
+                        isToday ? 'cursor-pointer' : 'cursor-default'
+                      }`}
+                    >
+                      {isToday && (
+                        <div className={`w-3 h-3 rounded-full border border-dashed border-white/20 hover:border-white/50 transition-colors ${
+                          isTicked ? 'opacity-0' : 'opacity-100'
+                        }`} />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -309,66 +312,74 @@ export function TimelineStream({
 
         {/* Dates Column */}
         <div className="w-28 border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative shadow-[10px_0_20px_rgba(0,0,0,0.4)]" style={{ height: `${totalStreamHeight}px` }}>
-          {TIMELINE_DAYS.map((d) => (
-            <div 
-              key={d.dayIndex} 
-              style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }} 
-              className="absolute w-full flex items-center px-3"
-            >
-              <div
-                className={`w-full py-2 px-2 rounded flex flex-col items-center justify-center border transition-all ${
-                  d.dayIndex === currentDay 
-                    ? 'border-white/20 bg-white/10 shadow-sm' 
-                    : d.isSunday 
-                      ? 'border-amber-400/30 bg-amber-400/10 shadow-[0_0_12px_rgba(251,191,36,0.08)]' 
-                      : 'border-transparent'
-                }`}
+          {timelineDays.map((d) => {
+            const isToday = d.isoDate === todayIso;
+
+            return (
+              <div 
+                key={d.isoDate} 
+                style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }} 
+                className="absolute w-full flex items-center px-3"
               >
-                <span className={`text-[10px] font-black ${
-                  d.dayIndex === currentDay 
-                    ? 'text-white' 
-                    : d.isSunday 
-                      ? 'text-amber-400' 
-                      : 'text-neutral-500'
-                }`}>
-                  {d.dayName}
-                </span>
-                <span className={`text-[9px] font-mono ${d.isSunday ? 'text-amber-300/80 font-bold' : 'text-neutral-600'}`}>
-                  {d.dateStr}
-                </span>
+                <div
+                  className={`w-full py-2 px-2 rounded flex flex-col items-center justify-center border transition-all ${
+                    isToday 
+                      ? 'border-white/30 bg-white/10 shadow-sm' 
+                      : d.isSunday 
+                        ? 'border-amber-400/30 bg-amber-400/10 shadow-[0_0_12px_rgba(251,191,36,0.08)]' 
+                        : 'border-transparent'
+                  }`}
+                >
+                  <span className={`text-[10px] font-black ${
+                    isToday 
+                      ? 'text-white' 
+                      : d.isSunday 
+                        ? 'text-amber-400' 
+                        : 'text-neutral-500'
+                  }`}>
+                    {d.dayName}
+                  </span>
+                  <span className={`text-[9px] font-mono ${isToday ? 'text-white font-bold' : d.isSunday ? 'text-amber-300/80 font-bold' : 'text-neutral-600'}`}>
+                    {d.dateStr}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Main Canvas */}
         <div className="flex-1 relative min-w-max" style={{ height: `${totalStreamHeight}px` }}>
           <div className="absolute inset-0 pointer-events-none z-0">
-            {TIMELINE_DAYS.map((d) => (
-              <div 
-                key={d.dayIndex} 
-                style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px` }} 
-                className="absolute w-full flex items-center"
-              >
+            {timelineDays.map((d) => {
+              const isToday = d.isoDate === todayIso;
+
+              return (
                 <div 
-                  className={`w-full border-b ${
-                    d.dayIndex === currentDay 
-                      ? 'border-white/25 shadow-[0_0_8px_rgba(255,255,255,0.15)]' 
-                      : d.isSunday 
-                        ? 'border-amber-400/20 bg-amber-400/[0.01]' 
-                        : d.dayIndex % 7 === 0 
-                          ? 'border-white/15' 
-                          : 'border-white/5'
-                  }`} 
-                />
-              </div>
-            ))}
+                  key={d.isoDate} 
+                  style={{ top: `${CANVAS_PAD_Y + d.dayIndex * ROW_HEIGHT}px` }} 
+                  className="absolute w-full flex items-center"
+                >
+                  <div 
+                    className={`w-full border-b ${
+                      isToday 
+                        ? 'border-white/25 shadow-[0_0_8px_rgba(255,255,255,0.15)]' 
+                        : d.isSunday 
+                          ? 'border-amber-400/20 bg-amber-400/[0.01]' 
+                          : d.dayIndex % 7 === 0 
+                            ? 'border-white/15' 
+                            : 'border-white/5'
+                    }`} 
+                  />
+                </div>
+              );
+            })}
           </div>
 
           <div className="absolute inset-0 z-20">
             {tasks.map((task, idx) => {
               const isSelected = selectedTaskId === task.id;
-              const { blocks, cords } = parseTaskMatrix(task, currentDay);
+              const { blocks, cords } = parseTaskMatrix(task, timelineDays);
 
               return (
                 <div

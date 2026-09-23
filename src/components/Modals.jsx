@@ -106,11 +106,11 @@ export function HabitModal({
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div>
             <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
-              Habit Label (Max 5 letters)
+              Habit Label (Max 16 letters)
             </label>
             <input
               type="text"
-              maxLength={5}
+              maxLength={16}
               required
               autoFocus
               placeholder="e.g. READ"

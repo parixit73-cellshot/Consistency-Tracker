@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   ROW_HEIGHT,
   CANVAS_PAD_Y,
-  BASE_CURRENT_DAY_INDEX,
-  TIMELINE_DAYS,
+  formatISODate,
+  generateTimelineDays,
   generateSafeId,
   sanitizeTask,
   sanitizeHabit,
@@ -12,7 +12,6 @@ import {
   loadPersistedRevisions,
   persistState,
   executeMatrixAction,
-  shiftCurrentDay,
   toggleHabitToday,
   renameTask,
   renameHabit,
@@ -31,7 +30,27 @@ export default function App() {
   const [habits, setHabits] = useState(loadPersistedHabits);
   const [revisions, setRevisions] = useState(loadPersistedRevisions);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
-  const [currentDay, setCurrentDay] = useState(BASE_CURRENT_DAY_INDEX);
+
+  // Sync to real laptop time
+  const [now, setNow] = useState(() => new Date());
+  const todayIso = useMemo(() => formatISODate(now), [now]);
+
+  // Generate dynamic calendar slice: 21 days back, 7 days forward
+  const timelineDays = useMemo(() => generateTimelineDays(now, 21, 7), [now]);
+
+  // Today's day index in the current slice
+  const todayIndex = useMemo(() => {
+    const idx = timelineDays.findIndex((d) => d.isoDate === todayIso);
+    return idx !== -1 ? idx : 21;
+  }, [timelineDays, todayIso]);
+
+  // Refresh clock every minute to detect midnight turnover automatically
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: '', hex: '#34d399', position: 1 });
@@ -72,8 +91,7 @@ export default function App() {
 
   const centerCurrentWeek = (smooth = true) => {
     if (!scrollContainerRef.current) return;
-    const currentWeekStartDay = Math.floor(currentDay / 7) * 7;
-    const targetScroll = CANVAS_PAD_Y + currentWeekStartDay * ROW_HEIGHT - 12;
+    const targetScroll = CANVAS_PAD_Y + Math.max(0, todayIndex - 3) * ROW_HEIGHT - 12;
     scrollContainerRef.current.scrollTo({
       top: Math.max(0, targetScroll),
       behavior: smooth ? 'smooth' : 'auto',
@@ -82,7 +100,7 @@ export default function App() {
 
   useEffect(() => {
     centerCurrentWeek(false);
-  }, []);
+  }, [todayIndex]);
 
   const activeTasks = tasks.filter((t) => !t.isArchived);
   const archivedTasks = tasks.filter((t) => t.isArchived);
@@ -92,11 +110,7 @@ export default function App() {
     if (!taskForm.title.trim()) return;
     snapshotState(`Spawn Task: ${taskForm.title}`);
     setTasks((prev) =>
-      insertNewTask(
-        prev,
-        { title: taskForm.title, hex: taskForm.hex, position: parseInt(taskForm.position, 10) },
-        TIMELINE_DAYS.length
-      )
+      insertNewTask(prev, { title: taskForm.title, hex: taskForm.hex, position: parseInt(taskForm.position, 10) })
     );
     setTaskModalOpen(false);
   };
@@ -106,11 +120,7 @@ export default function App() {
     if (!habitForm.label.trim()) return;
     snapshotState(`Spawn Habit: ${habitForm.label}`);
     setHabits((prev) =>
-      insertNewHabit(
-        prev,
-        { label: habitForm.label, hex: habitForm.hex, position: parseInt(habitForm.position, 10) },
-        TIMELINE_DAYS.length
-      )
+      insertNewHabit(prev, { label: habitForm.label, hex: habitForm.hex, position: parseInt(habitForm.position, 10) })
     );
     setHabitModalOpen(false);
   };
@@ -172,8 +182,13 @@ export default function App() {
   };
 
   const selectedTask = activeTasks.find((t) => t.id === selectedTaskId);
-  const todayStatus = selectedTask ? selectedTask.matrix[currentDay] : 0;
-  const currentDayInfo = TIMELINE_DAYS[currentDay];
+  const todayStatus = selectedTask ? (selectedTask.matrix?.[todayIso] || 0) : 0;
+  const currentDayInfo = timelineDays[todayIndex] || {
+    weekNum: 39,
+    dayName: 'TODAY',
+    dateStr: todayIso,
+    isSunday: false,
+  };
 
   // Keyboard Shortcuts (Enter = Start/Stop, Del = Archive, Ctrl+Z = Undo)
   useEffect(() => {
@@ -185,16 +200,16 @@ export default function App() {
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
-        setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'UNDO', currentDay));
+        setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'UNDO', todayIso));
         return;
       }
 
       if (e.key === 'Enter') {
         e.preventDefault();
         if (todayStatus === 2) {
-          setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'STOP', currentDay));
+          setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'STOP', todayIso));
         } else if (todayStatus === 0) {
-          setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'START', currentDay));
+          setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'START', todayIso));
         }
         return;
       }
@@ -207,7 +222,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTaskId, todayStatus, currentDay, handleArchiveTask]);
+  }, [selectedTaskId, todayStatus, todayIso, handleArchiveTask]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#070707] text-white font-mono select-none overflow-hidden relative">
@@ -217,13 +232,6 @@ export default function App() {
       <Header
         currentDayInfo={currentDayInfo}
         onCenterWeek={() => centerCurrentWeek(true)}
-        onShiftDay={(delta) => {
-          const nextDay = Math.min(Math.max(0, currentDay + delta), TIMELINE_DAYS.length - 1);
-          if (nextDay !== currentDay) {
-            setTasks((prev) => shiftCurrentDay(prev, currentDay, nextDay));
-            setCurrentDay(nextDay);
-          }
-        }}
         onExportBackup={() => {
           const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ tasks, habits }));
           const a = document.createElement('a');
@@ -246,12 +254,13 @@ export default function App() {
       {/* TIMELINE STREAM */}
       <TimelineStream
         scrollRef={scrollContainerRef}
+        timelineDays={timelineDays}
+        todayIso={todayIso}
         tasks={activeTasks}
         habits={habits}
-        currentDay={currentDay}
         selectedTaskId={selectedTaskId}
         onSelectTask={setSelectedTaskId}
-        onHabitClick={(habitId, dayIndex) => setHabits((prev) => toggleHabitToday(prev, habitId, dayIndex, currentDay))}
+        onHabitClick={(habitId, targetIso) => setHabits((prev) => toggleHabitToday(prev, habitId, targetIso))}
         onDeleteHabit={(e, habitId) => {
           e.stopPropagation();
           snapshotState('Delete Habit');
@@ -288,7 +297,7 @@ export default function App() {
         onArchiveTask={handleArchiveTask}
         onAction={(action) => {
           if (!selectedTaskId) return;
-          setTasks((prev) => executeMatrixAction(prev, selectedTaskId, action, currentDay));
+          setTasks((prev) => executeMatrixAction(prev, selectedTaskId, action, todayIso));
         }}
       />
 
