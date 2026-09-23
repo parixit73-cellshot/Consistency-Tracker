@@ -113,7 +113,7 @@ export function TimelineStream({
                 </button>
 
                 {isPopoverOpen && (
-                  <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
+                  <div className="absolute top-8 left-1/2 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
                     <div className="flex items-center justify-between">
                       {habitInlineEdit ? (
                         <div className="flex items-center gap-1 w-full mr-2">
