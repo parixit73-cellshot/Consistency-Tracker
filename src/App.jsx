@@ -17,7 +17,6 @@ import {
   renameTask,
   renameHabit,
   updateTaskColor,
-  updateBlockNote,
   insertNewTask,
   insertNewHabit,
 } from './trackerStore';
@@ -26,7 +25,6 @@ import { Header, FooterControls } from './components/Header';
 import { TimelineStream } from './components/TimelineStream';
 import { TaskModal, HabitModal, NameHistoryModal } from './components/Modals';
 import { ImportInspectorModal, RevisionsModal, VaultDrawer } from './components/BackupVaultModals';
-import { BlockNoteModal } from './components/TaskNotesCallout';
 
 export default function App() {
   const [tasks, setTasks] = useState(loadPersistedTasks);
@@ -44,9 +42,6 @@ export default function App() {
   const [vaultOpen, setVaultOpen] = useState(false);
   const [historyModalTask, setHistoryModalTask] = useState(null);
   const [revisionsModalOpen, setRevisionsModalOpen] = useState(false);
-
-  // Block Resume Note Modal State
-  const [activeNoteModal, setActiveNoteModal] = useState(null); // { task, block }
 
   const [importFilePayload, setImportFilePayload] = useState(null);
   const [selectedImportTaskIds, setSelectedImportTaskIds] = useState(new Set());
@@ -176,16 +171,11 @@ export default function App() {
     setImportFilePayload(null);
   };
 
-  const handleSaveBlockNote = (noteData) => {
-    if (!activeNoteModal) return;
-    setTasks((prev) => updateBlockNote(prev, activeNoteModal.task.id, activeNoteModal.block.start, noteData));
-  };
-
   const selectedTask = activeTasks.find((t) => t.id === selectedTaskId);
   const todayStatus = selectedTask ? selectedTask.matrix[currentDay] : 0;
   const currentDayInfo = TIMELINE_DAYS[currentDay];
 
-  // Keyboard Shortcuts Listener
+  // Keyboard Shortcuts (Enter = Start/Stop, Del = Archive, Ctrl+Z = Undo)
   useEffect(() => {
     function handleKeyDown(e) {
       const tagName = document.activeElement?.tagName;
@@ -287,7 +277,6 @@ export default function App() {
           setHabits((prevH) => renameHabit(prevH, id, newLabel));
           return prev;
         })}
-        onOpenBlockNote={(task, block) => setActiveNoteModal({ task, block })}
         onOpenHistory={setHistoryModalTask}
       />
 
@@ -303,16 +292,7 @@ export default function App() {
         }}
       />
 
-      {/* BLOCK RESUME CONTEXT MODAL */}
-      <BlockNoteModal
-        isOpen={Boolean(activeNoteModal)}
-        onClose={() => setActiveNoteModal(null)}
-        taskTitle={activeNoteModal?.task.title}
-        initialNote={activeNoteModal?.block.note}
-        onSave={handleSaveBlockNote}
-      />
-
-      {/* OTHER MODALS */}
+      {/* MODALS */}
       <TaskModal
         isOpen={taskModalOpen}
         onClose={() => setTaskModalOpen(false)}

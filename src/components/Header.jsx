@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Plus, Play, Square, RotateCcw, FastForward, Rewind, LocateFixed, 
-  Archive, Download, Upload, Palette, Layers, FileText 
+  Archive, Download, Upload, Palette, Layers 
 } from 'lucide-react';
 
 export function Header({
@@ -108,8 +108,7 @@ export function FooterControls({
   todayStatus,
   onColorChange,
   onArchiveTask,
-  onAction,
-  onOpenNotes
+  onAction
 }) {
   return (
     <footer className="h-16 border-t border-white/10 bg-[#0a0a0a] flex items-center justify-between px-8 shrink-0 z-40">
@@ -144,21 +143,6 @@ export function FooterControls({
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Note Trigger Button */}
-        <button
-          disabled={!selectedTask}
-          onClick={onOpenNotes}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-bold tracking-wider uppercase transition-colors border ${
-            !selectedTask
-              ? 'border-white/5 text-white/20 cursor-default'
-              : 'border-white/20 hover:border-white/50 text-white bg-white/5 hover:bg-white/10 cursor-pointer'
-          }`}
-          title="Open block notes (Hotkey: N)"
-        >
-          <FileText size={12} className={selectedTask ? 'text-amber-400' : ''} />
-          <span>Note <span className="opacity-50 text-[9px]">(N)</span></span>
-        </button>
-
         <button
           disabled={!selectedTask || todayStatus === 2}
           onClick={() => onAction('START')}

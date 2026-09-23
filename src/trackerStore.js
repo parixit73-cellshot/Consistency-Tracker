@@ -25,83 +25,13 @@ export const TIMELINE_DAYS = Array.from({ length: 28 }, (_, i) => {
   };
 });
 
-const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v6';
-const STORAGE_HABITS_KEY = 'flow_tracker_habits_v6';
-const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_v6';
+const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v7';
+const STORAGE_HABITS_KEY = 'flow_tracker_habits_v7';
+const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_v7';
 
-export const INITIAL_HABITS = [
-  { 
-    id: 'habit-code', 
-    label: 'CODE', 
-    hex: '#22d3ee', 
-    nameHistory: [{ title: 'CODE', at: '2026-09-06' }],
-    data: [1, 1, 1, 1, 1, 0, 0,  1, 1, 1, 1, 0, 1, 1,  1, 1, 1, 1, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
-  },
-  { 
-    id: 'habit-gym', 
-    label: 'GYM', 
-    hex: '#fb7185', 
-    nameHistory: [{ title: 'GYM', at: '2026-09-06' }],
-    data: [0, 1, 0, 1, 1, 0, 0,  0, 1, 0, 1, 1, 0, 0,  0, 1, 0, 1, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
-  },
-  { 
-    id: 'habit-diet', 
-    label: 'DIET', 
-    hex: '#34d399', 
-    nameHistory: [{ title: 'DIET', at: '2026-09-06' }],
-    data: [1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 0, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
-  }
-];
+export const INITIAL_HABITS = [];
 
-export const INITIAL_TASKS = [
-  {
-    id: 'col-2d-anim',
-    title: '2D Animation',
-    hex: '#34d399',
-    streak: 3,
-    isArchived: false,
-    blockNotes: {
-      '1': { done: 'Keyframes sketched', next: 'Clean line cleanup' }
-    },
-    nameHistory: [{ title: '2D Animation', at: '2026-09-06' }],
-    matrix: [
-      0, 1, 1, 1, 0, 0, 0,
-      0, 1, 1, 1, 0, 0, 0,
-      0, 1, 1, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0
-    ],
-  },
-  {
-    id: 'col-motor-design',
-    title: 'Motor Design',
-    hex: '#818cf8',
-    streak: 0,
-    isArchived: false,
-    blockNotes: {},
-    nameHistory: [{ title: 'Motor Design', at: '2026-09-06' }],
-    matrix: new Array(28).fill(0),
-  },
-  {
-    id: 'col-3d-anim',
-    title: '3D Animation',
-    hex: '#fbbf24',
-    streak: 5,
-    isArchived: false,
-    blockNotes: {
-      '17': { done: 'Rigging arms & torso', next: 'Weight painting fingers' }
-    },
-    nameHistory: [
-      { title: '3D Modeling', at: '2026-09-08' },
-      { title: '3D Animation', at: '2026-09-14' }
-    ],
-    matrix: [
-      1, 1, 0, 0, 1, 1, 0,
-      1, 1, 0, 0, 1, 1, 0,
-      0, 0, 0, 1, 2, 0, 0,
-      0, 0, 0, 0, 0, 0, 0
-    ],
-  },
-];
+export const INITIAL_TASKS = [];
 
 export function generateSafeId(prefix = 'id') {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -118,7 +48,6 @@ export function sanitizeTask(t) {
     hex: t.hex || '#34d399',
     streak: typeof t.streak === 'number' ? t.streak : 0,
     isArchived: Boolean(t.isArchived),
-    blockNotes: t.blockNotes && typeof t.blockNotes === 'object' ? t.blockNotes : {},
     nameHistory: Array.isArray(t.nameHistory) ? t.nameHistory : [{ title: t.title || 'Init', at: 'Init' }],
     matrix: Array.isArray(t.matrix) ? t.matrix : new Array(28).fill(0),
   };
@@ -220,12 +149,7 @@ export function parseTaskMatrix(task, currentDay) {
       if (val === 2) hasActive = true;
     } else {
       if (blockStart !== null) {
-        blocks.push({ 
-          start: blockStart, 
-          days: blockLen, 
-          isActive: hasActive,
-          note: task.blockNotes?.[String(blockStart)] || null
-        });
+        blocks.push({ start: blockStart, days: blockLen, isActive: hasActive });
         blockStart = null;
         blockLen = 0;
         hasActive = false;
@@ -233,12 +157,7 @@ export function parseTaskMatrix(task, currentDay) {
     }
   }
   if (blockStart !== null) {
-    blocks.push({ 
-      start: blockStart, 
-      days: blockLen, 
-      isActive: hasActive,
-      note: task.blockNotes?.[String(blockStart)] || null
-    });
+    blocks.push({ start: blockStart, days: blockLen, isActive: hasActive });
   }
 
   const cords = [];
@@ -339,23 +258,6 @@ export function updateTaskColor(tasks, taskId, newHex) {
   return tasks.map((t) => (t.id === taskId ? { ...t, hex: newHex } : t));
 }
 
-export function updateBlockNote(tasks, taskId, blockStart, noteData) {
-  return tasks.map((t) => {
-    if (t.id !== taskId) return t;
-    const nextNotes = { ...(t.blockNotes || {}) };
-    if (!noteData.done?.trim() && !noteData.next?.trim()) {
-      delete nextNotes[String(blockStart)];
-    } else {
-      nextNotes[String(blockStart)] = {
-        done: noteData.done.trim(),
-        next: noteData.next.trim(),
-        updatedAt: new Date().toISOString().split('T')[0]
-      };
-    }
-    return { ...t, blockNotes: nextNotes };
-  });
-}
-
 export function insertNewTask(tasks, { title, hex, position }, totalDays) {
   const newTask = {
     id: generateSafeId('col'),
@@ -363,7 +265,6 @@ export function insertNewTask(tasks, { title, hex, position }, totalDays) {
     hex: hex || '#34d399',
     streak: 0,
     isArchived: false,
-    blockNotes: {},
     nameHistory: [{ title: title.trim(), at: new Date().toISOString().split('T')[0] }],
     matrix: new Array(totalDays).fill(0),
   };
