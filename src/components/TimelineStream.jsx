@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Edit2, Check, History } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { 
   ROW_HEIGHT, 
   TRACK_WIDTH, 
@@ -18,6 +18,7 @@ export function TimelineStream({
   habits,
   selectedTaskId,
   onSelectTask,
+  onMoveTask,
   onHabitClick,
   onDeleteHabit,
   onOpenHabitModal,
@@ -37,6 +38,15 @@ export function TimelineStream({
   const [habitInlineEdit, setHabitInlineEdit] = useState(false);
   const [habitInputValue, setHabitInputValue] = useState('');
   const popoverRef = useRef(null);
+
+  // Synchronized horizontal scroll ref
+  const headerScrollRef = useRef(null);
+
+  const handleStreamScroll = (e) => {
+    if (headerScrollRef.current) {
+      headerScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -62,14 +72,17 @@ export function TimelineStream({
     setHabitInlineEdit(false);
   };
 
+  const taskCanvasWidth = Math.max(1000, tasks.length * (COLUMN_WIDTH + 40) + 120);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
+      {/* STICKY HEADER BAR */}
       <div className="h-14 border-b border-white/5 bg-[#0a0a0a] flex shrink-0 z-30">
         
-        {/* Habits Header */}
+        {/* Pinned Left: Habits */}
         <div 
           style={{ width: `${habitRailWidth}px` }} 
-          className="border-r border-white/5 relative shrink-0"
+          className="border-r border-white/5 relative shrink-0 z-20 bg-[#0a0a0a]"
           ref={popoverRef}
         >
           {habits.map((h, idx) => {
@@ -100,7 +113,7 @@ export function TimelineStream({
                 </button>
 
                 {isPopoverOpen && (
-                  <div className="absolute top-8 left-1/2 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
+                  <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
                     <div className="flex items-center justify-between">
                       {habitInlineEdit ? (
                         <div className="flex items-center gap-1 w-full mr-2">
@@ -179,85 +192,121 @@ export function TimelineStream({
           </button>
         </div>
 
-        {/* Date Spacer */}
-        <div className="w-28 border-r border-white/5 flex items-center justify-center shrink-0">
+        {/* Pinned Left: Date Spacer */}
+        <div className="w-28 border-r border-white/5 flex items-center justify-center shrink-0 z-20 bg-[#0a0a0a]">
           <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
         </div>
 
-        {/* Task Column Headers */}
-        <div className="flex-1 relative overflow-hidden min-w-max">
-          {tasks.map((task, idx) => (
-            <div
-              key={`${task.id}-${idx}`}
-              style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
-              className={`absolute h-full flex flex-col items-center justify-center transition-colors ${
-                selectedTaskId === task.id ? 'text-white' : 'text-neutral-400 hover:text-neutral-200'
-              }`}
-            >
-              <div className="flex items-center gap-1.5 justify-center w-full px-2">
-                <input
-                  type="color"
-                  value={task.hex}
-                  onChange={(e) => onColorChange(task.id, e.target.value)}
-                  className="w-3 h-3 rounded-full cursor-pointer bg-transparent border-none outline-none shrink-0"
-                  title="Click to tweak track color"
-                />
-
-                {editingItemId === task.id ? (
-                  <input
-                    type="text"
-                    maxLength={16}
-                    value={editValue}
-                    autoFocus
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={() => onSaveRename('task', task.id)}
-                    onKeyDown={(e) => e.key === 'Enter' && onSaveRename('task', task.id)}
-                    className="w-24 bg-black border border-white/30 rounded px-1 text-[10px] text-center text-white outline-none"
-                  />
-                ) : (
-                  <span 
-                    onDoubleClick={() => onStartRename(task.id, task.title)} 
-                    title="Double click to rename"
-                    className="text-[10px] font-black uppercase tracking-wider truncate max-w-[90px] cursor-pointer"
+        {/* Horizontally Synced Task Column Headers */}
+        <div ref={headerScrollRef} className="flex-1 overflow-hidden relative no-scrollbar">
+          <div style={{ width: `${taskCanvasWidth}px`, height: '100%' }} className="relative">
+            {tasks.map((task, idx) => (
+              <div
+                key={`${task.id}-${idx}`}
+                style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
+                className={`absolute h-full flex flex-col items-center justify-center transition-colors ${
+                  selectedTaskId === task.id ? 'text-white' : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <div className="flex items-center gap-1 justify-center w-full px-1">
+                  {/* Move Left */}
+                  <button
+                    disabled={idx === 0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveTask(task.id, 'left');
+                    }}
+                    className={`p-0.5 rounded hover:bg-white/10 transition-colors ${
+                      idx === 0 ? 'opacity-20 cursor-default' : 'text-neutral-500 hover:text-white cursor-pointer'
+                    }`}
+                    title="Move column left"
                   >
-                    {task.title}
-                  </span>
-                )}
+                    <ChevronLeft size={12} />
+                  </button>
 
-                <button
-                  onClick={() => onOpenHistory(task)}
-                  className="text-neutral-500 hover:text-neutral-200 transition-colors cursor-pointer shrink-0"
-                  title="View name evolution history"
-                >
-                  <History size={11} />
-                </button>
-              </div>
+                  {/* Color Picker */}
+                  <input
+                    type="color"
+                    value={task.hex}
+                    onChange={(e) => onColorChange(task.id, e.target.value)}
+                    className="w-3 h-3 rounded-full cursor-pointer bg-transparent border-none outline-none shrink-0"
+                    title="Click to tweak track color"
+                  />
 
-              <div className="h-4 flex items-center justify-center">
-                {task.streak > 0 ? (
-                  <span className="text-[10px] text-amber-500 font-bold drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
-                    🔥 {task.streak}
-                  </span>
-                ) : (
-                  <span className="text-[9px] text-neutral-600 tracking-wider font-mono">
-                    {Object.values(task.matrix || {}).filter((v) => v > 0).length}d
-                  </span>
-                )}
+                  {/* Inline Title / Rename */}
+                  {editingItemId === task.id ? (
+                    <input
+                      type="text"
+                      maxLength={16}
+                      value={editValue}
+                      autoFocus
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => onSaveRename('task', task.id)}
+                      onKeyDown={(e) => e.key === 'Enter' && onSaveRename('task', task.id)}
+                      className="w-20 bg-black border border-white/30 rounded px-1 text-[10px] text-center text-white outline-none"
+                    />
+                  ) : (
+                    <span 
+                      onDoubleClick={() => onStartRename(task.id, task.title)} 
+                      title="Double click to rename"
+                      className="text-[10px] font-black uppercase tracking-wider truncate max-w-[80px] cursor-pointer"
+                    >
+                      {task.title}
+                    </span>
+                  )}
+
+                  {/* History Clock */}
+                  <button
+                    onClick={() => onOpenHistory(task)}
+                    className="text-neutral-500 hover:text-neutral-200 transition-colors cursor-pointer shrink-0"
+                    title="View name evolution history"
+                  >
+                    <History size={10} />
+                  </button>
+
+                  {/* Move Right */}
+                  <button
+                    disabled={idx === tasks.length - 1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveTask(task.id, 'right');
+                    }}
+                    className={`p-0.5 rounded hover:bg-white/10 transition-colors ${
+                      idx === tasks.length - 1 ? 'opacity-20 cursor-default' : 'text-neutral-500 hover:text-white cursor-pointer'
+                    }`}
+                    title="Move column right"
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+
+                <div className="h-4 flex items-center justify-center">
+                  {task.streak > 0 ? (
+                    <span className="text-[10px] text-amber-500 font-bold drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
+                      🔥 {task.streak}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-neutral-600 tracking-wider font-mono">
+                      {Object.values(task.matrix || {}).filter((v) => v > 0).length}d
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
       {/* UNIFIED SCROLL STREAM */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto overflow-x-hidden flex relative bg-[#050505] no-scrollbar"
+        onScroll={handleStreamScroll}
+        className="flex-1 overflow-y-auto overflow-x-auto flex relative bg-[#050505] no-scrollbar select-none"
       >
-        {/* Habit Rails */}
+        {/* Sticky Pinned Left: Habit Rails */}
         <div 
           style={{ width: `${habitRailWidth}px`, height: `${totalStreamHeight}px` }} 
-          className="border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative"
+          className="border-r border-white/5 bg-[#080808]/95 shrink-0 z-20 sticky left-0 shadow-lg"
         >
           {habits.map((habit, hIdx) => {
             const blocks = parseHabitBlocks(habit.data || {}, timelineDays);
@@ -275,7 +324,7 @@ export function TimelineStream({
                       key={bIdx}
                       style={{ 
                         top: `${top}px`, 
-                        height: `${height}px`,
+                        height: `${height}px`, 
                         backgroundColor: habit.hex,
                         boxShadow: `0 0 8px ${habit.hex}60`
                       }}
@@ -310,8 +359,11 @@ export function TimelineStream({
           })}
         </div>
 
-        {/* Dates Column */}
-        <div className="w-28 border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative shadow-[10px_0_20px_rgba(0,0,0,0.4)]" style={{ height: `${totalStreamHeight}px` }}>
+        {/* Sticky Pinned Left: Dates Column */}
+        <div 
+          style={{ width: '112px', height: `${totalStreamHeight}px`, left: `${habitRailWidth}px` }} 
+          className="border-r border-white/5 bg-[#080808]/95 shrink-0 z-20 sticky shadow-[10px_0_20px_rgba(0,0,0,0.5)]"
+        >
           {timelineDays.map((d) => {
             const isToday = d.isoDate === todayIso;
 
@@ -348,8 +400,8 @@ export function TimelineStream({
           })}
         </div>
 
-        {/* Main Canvas */}
-        <div className="flex-1 relative min-w-max" style={{ height: `${totalStreamHeight}px` }}>
+        {/* Fluid Tasks Scrollable Canvas */}
+        <div className="relative shrink-0" style={{ width: `${taskCanvasWidth}px`, height: `${totalStreamHeight}px` }}>
           <div className="absolute inset-0 pointer-events-none z-0">
             {timelineDays.map((d) => {
               const isToday = d.isoDate === todayIso;
@@ -376,7 +428,7 @@ export function TimelineStream({
             })}
           </div>
 
-          <div className="absolute inset-0 z-20">
+          <div className="absolute inset-0 z-10">
             {tasks.map((task, idx) => {
               const isSelected = selectedTaskId === task.id;
               const { blocks, cords } = parseTaskMatrix(task, timelineDays);
@@ -392,6 +444,7 @@ export function TimelineStream({
                 >
                   <div className="absolute inset-y-0 w-[1px] bg-white/5 pointer-events-none" />
 
+                  {/* Umbilical Cords */}
                   {cords.map((cord, cIdx) => {
                     const top = CANVAS_PAD_Y + cord.startY * ROW_HEIGHT;
                     const height = (cord.endY - cord.startY) * ROW_HEIGHT;
@@ -400,7 +453,7 @@ export function TimelineStream({
                         key={cIdx}
                         style={{ 
                           top: `${top}px`, 
-                          height: `${height}px`,
+                          height: `${height}px`, 
                           backgroundColor: task.hex,
                           boxShadow: `0 0 12px ${task.hex}80`
                         }}
@@ -409,10 +462,12 @@ export function TimelineStream({
                     );
                   })}
 
+                  {/* Fluid Block Trackers with Neon Luminescence */}
                   <div className="relative flex justify-center" style={{ width: `${TRACK_WIDTH}px` }}>
                     {blocks.map((block, bIdx) => {
                       const top = CANVAS_PAD_Y + block.start * ROW_HEIGHT;
                       const height = block.days * ROW_HEIGHT;
+                      const isGlowing = task.streak > 3 || block.isActive;
 
                       return (
                         <div
@@ -421,11 +476,16 @@ export function TimelineStream({
                             top: `${top}px`, 
                             height: `${height}px`, 
                             width: `${TRACK_WIDTH}px`,
-                            backgroundColor: task.hex
+                            backgroundColor: task.hex,
+                            boxShadow: isGlowing 
+                              ? `0 0 9px ${task.hex}55, 0 4px 24px rgba(0,0,0,0.6)` 
+                              : '0 4px 24px rgba(0,0,0,0.5)'
                           }}
-                          className="absolute rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center py-3 pointer-events-none transition-all duration-200"
+                          className={`absolute rounded-full flex flex-col items-center justify-center py-3 pointer-events-none transition-all duration-200 ${
+                            block.isActive ? 'ring-2 ring-white/60' : ''
+                          }`}
                         >
-                          <span className="text-[10px] font-black text-black/70 rotate-90">{block.days}d</span>
+                          <span className="text-[10px] font-black text-black/80 rotate-90">{block.days}d</span>
                         </div>
                       );
                     })}

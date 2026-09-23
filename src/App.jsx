@@ -16,6 +16,7 @@ import {
   renameTask,
   renameHabit,
   updateTaskColor,
+  moveTaskPosition,
   insertNewTask,
   insertNewHabit,
 } from './trackerStore';
@@ -36,7 +37,8 @@ export default function App() {
   const todayIso = useMemo(() => formatISODate(now), [now]);
 
   // Generate dynamic calendar slice: 21 days back, 7 days forward
-  const timelineDays = useMemo(() => generateTimelineDays(now, 21, 7), [now]);
+  // Adaptively spans as many months back as required (minimum 90 days)
+  const timelineDays = useMemo(() => generateTimelineDays(now, tasks, habits), [now, tasks, habits]);
 
   // Today's day index in the current slice
   const todayIndex = useMemo(() => {
@@ -260,6 +262,10 @@ export default function App() {
         habits={habits}
         selectedTaskId={selectedTaskId}
         onSelectTask={setSelectedTaskId}
+        onMoveTask={(taskId, direction) => {
+          snapshotState(`Reorder Task: ${direction}`);
+          setTasks((prev) => moveTaskPosition(prev, taskId, direction));
+        }}
         onHabitClick={(habitId, targetIso) => setHabits((prev) => toggleHabitToday(prev, habitId, targetIso))}
         onDeleteHabit={(e, habitId) => {
           e.stopPropagation();

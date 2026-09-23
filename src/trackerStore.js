@@ -26,18 +26,39 @@ export function getWeekNumber(d) {
   return Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
 }
 
-// Generate a sliding dynamic timeline window based on real clock
-// Defaults to past 21 days + today + future 7 days (total 29 days window)
-export function generateTimelineDays(centerDate = new Date(), pastDays = 21, futureDays = 7) {
+// Dynamic timeline generator that scans task data and ensures at least 90 days past + future
+export function generateTimelineDays(centerDate = new Date(), tasks = [], habits = []) {
+  // Find earliest date recorded in any task or habit
+  let earliestTime = new Date(centerDate).getTime() - (90 * 86400000); // Minimum 90 days (3 months) past
+
+  const scanDates = (dateMap) => {
+    if (!dateMap || typeof dateMap !== 'object') return;
+    Object.keys(dateMap).forEach((iso) => {
+      const t = new Date(iso).getTime();
+      if (!isNaN(t) && t < earliestTime) {
+        earliestTime = t;
+      }
+    });
+  };
+
+  tasks.forEach((t) => scanDates(t.matrix));
+  habits.forEach((h) => scanDates(h.data));
+
+  // Align start to the Sunday of that earliest week (with an extra week of padding)
+  const startDate = new Date(earliestTime);
+  startDate.setDate(startDate.getDate() - startDate.getDay() - 7);
+  startDate.setHours(0, 0, 0, 0);
+
+  // Extend 14 days into the future past centerDate
+  const endDate = new Date(centerDate);
+  endDate.setDate(endDate.getDate() + 14);
+  endDate.setHours(0, 0, 0, 0);
+
   const days = [];
-  const start = new Date(centerDate);
-  start.setDate(start.getDate() - pastDays);
+  const cur = new Date(startDate);
+  let idx = 0;
 
-  const total = pastDays + futureDays + 1;
-  for (let i = 0; i < total; i++) {
-    const cur = new Date(start);
-    cur.setDate(cur.getDate() + i);
-
+  while (cur <= endDate) {
     const iso = formatISODate(cur);
     const dayName = DAY_NAMES[cur.getDay()];
     const dateStr = `${String(cur.getDate()).padStart(2, '0')}/${String(cur.getMonth() + 1).padStart(2, '0')}`;
@@ -45,14 +66,17 @@ export function generateTimelineDays(centerDate = new Date(), pastDays = 21, fut
     const isSunday = cur.getDay() === 0;
 
     days.push({
-      dayIndex: i,
+      dayIndex: idx++,
       isoDate: iso,
       dayName,
       dateStr,
       weekNum,
       isSunday,
     });
+
+    cur.setDate(cur.getDate() + 1);
   }
+
   return days;
 }
 
@@ -336,23 +360,62 @@ export function insertNewTask(tasks, { title, hex, position }) {
     matrix: {},
   };
 
-  const copy = [...tasks];
-  const targetIndex = Math.max(0, Math.min(position - 1, copy.length));
-  copy.splice(targetIndex, 0, newTask);
-  return copy;
+  const parsedPos = parseInt(position, 10);
+  const pos = Number.isFinite(parsedPos) ? parsedPos : 1;
+
+  // Filter only visible active tasks to calculate true visual column slot
+  const activeOnly = tasks.filter((t) => !t.isArchived);
+  const targetActiveIndex = Math.max(0, Math.min(pos - 1, activeOnly.length));
+
+  if (targetActiveIndex >= activeOnly.length) {
+    // Append after all current tasks
+    return [...tasks, newTask];
+  } else {
+    // Place right before the active task currently at that slot
+    const referenceTask = activeOnly[targetActiveIndex];
+    const realIndex = tasks.findIndex((t) => t.id === referenceTask.id);
+    const copy = [...tasks];
+    copy.splice(realIndex, 0, newTask);
+    return copy;
+  }
 }
 
 export function insertNewHabit(habits, { label, hex, position }) {
   const newHabit = {
     id: generateSafeId('habit'),
-    label: label.trim().substring(0, 8).toUpperCase(),
+    label: label.trim().substring(0, 16).toUpperCase(),
     hex: hex || '#22d3ee',
-    nameHistory: [{ title: label.trim().substring(0, 8).toUpperCase(), at: formatISODate(new Date()) }],
+    nameHistory: [{ title: label.trim().substring(0, 16).toUpperCase(), at: formatISODate(new Date()) }],
     data: {},
   };
 
+  const parsedPos = parseInt(position, 10);
+  const pos = Number.isFinite(parsedPos) ? parsedPos : 1;
+  const targetIndex = Math.max(0, Math.min(pos - 1, habits.length));
+
   const copy = [...habits];
-  const targetIndex = Math.max(0, Math.min(position - 1, copy.length));
   copy.splice(targetIndex, 0, newHabit);
+  return copy;
+}
+export function moveTaskPosition(tasks, taskId, direction) {
+  const activeTasks = tasks.filter((t) => !t.isArchived);
+  const fromIndex = activeTasks.findIndex((t) => t.id === taskId);
+  if (fromIndex === -1) return tasks;
+
+  const toIndex = direction === 'left' ? fromIndex - 1 : fromIndex + 1;
+  if (toIndex < 0 || toIndex >= activeTasks.length) return tasks;
+
+  // Swap target elements in activeTasks
+  const targetTask = activeTasks[toIndex];
+  
+  // Map back to main tasks array
+  const fullFrom = tasks.findIndex((t) => t.id === taskId);
+  const fullTo = tasks.findIndex((t) => t.id === targetTask.id);
+
+  const copy = [...tasks];
+  const temp = copy[fullFrom];
+  copy[fullFrom] = copy[fullTo];
+  copy[fullTo] = temp;
+
   return copy;
 }
