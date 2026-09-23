@@ -132,7 +132,10 @@ export default function App() {
   const [vaultOpen, setVaultOpen] = useState(false);
   const [historyModalTask, setHistoryModalTask] = useState(null);
   const [revisionsModalOpen, setRevisionsModalOpen] = useState(false);
-  const [importConfirmData, setImportConfirmData] = useState(null);
+
+  // Selective Track Import State
+  const [importFilePayload, setImportFilePayload] = useState(null);
+  const [selectedImportTaskIds, setSelectedImportTaskIds] = useState(new Set());
 
   // Hard Purge confirmation
   const [purgeConfirmId, setPurgeConfirmId] = useState(null);
@@ -145,7 +148,6 @@ export default function App() {
   const scrollContainerRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Take Snapshot before mutating
   const snapshotState = (reason = 'Manual Change') => {
     const snap = {
       id: `rev-${Date.now()}`,
@@ -213,7 +215,6 @@ export default function App() {
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isArchived: false } : t)));
   };
 
-  // Case-Insensitive Hard Purge
   const handleHardPurgeTask = (taskId) => {
     if (purgeInputText.trim().toUpperCase() !== 'DELETE') return;
     snapshotState('Purge Task Permanently');
@@ -288,7 +289,7 @@ export default function App() {
     }
   };
 
-  // Safe JSON Import Flow
+  // Single defined file selection handler for selective import
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -297,38 +298,41 @@ export default function App() {
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target.result);
-        if (parsed.tasks && parsed.habits) {
-          setImportConfirmData(parsed);
+        if (parsed.tasks && Array.isArray(parsed.tasks)) {
+          setImportFilePayload(parsed);
+          setSelectedImportTaskIds(new Set(parsed.tasks.map((t) => t.id)));
         }
       } catch (err) {
-        console.error('Invalid JSON file', err);
+        console.error('Invalid backup JSON', err);
       }
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
-  const applyImportChoice = (mode) => {
-    if (!importConfirmData) return;
-    snapshotState(`Import Backup (${mode})`);
+  const toggleImportSelection = (taskId) => {
+    setSelectedImportTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
 
-    if (mode === 'merge') {
-      // Append imported tasks alongside current ones without id collisions
-      const importedTasksWithNewIds = importConfirmData.tasks.map((t) => ({
+  const handleExecuteSelectiveImport = (destination = 'active') => {
+    if (!importFilePayload) return;
+    snapshotState(`Selective Track Import (${destination})`);
+
+    const tasksToBringIn = importFilePayload.tasks
+      .filter((t) => selectedImportTaskIds.has(t.id))
+      .map((t) => ({
         ...t,
         id: `imp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        isArchived: destination === 'vault',
       }));
-      setTasks((prev) => [...prev, ...importedTasksWithNewIds]);
-    } else if (mode === 'vault_current') {
-      // Move current to vault, load imported to canvas
-      const vaultedCurrent = tasks.map((t) => ({ ...t, isArchived: true }));
-      setTasks([...vaultedCurrent, ...importConfirmData.tasks]);
-      setHabits(importConfirmData.habits);
-    } else if (mode === 'overwrite') {
-      setTasks(importConfirmData.tasks);
-      setHabits(importConfirmData.habits);
-    }
-    setImportConfirmData(null);
+
+    setTasks((prev) => [...prev, ...tasksToBringIn]);
+    setImportFilePayload(null);
   };
 
   const handleExportBackup = () => {
@@ -371,7 +375,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* FOCUS CURRENT WEEK */}
           <button
             onClick={() => centerCurrentWeek(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
@@ -381,7 +384,6 @@ export default function App() {
             <span>Focus Week</span>
           </button>
 
-          {/* SIMULATE DATE SHIFT */}
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
             <span className="text-[9px] font-black text-neutral-500 uppercase tracking-wider mr-1">Simulate:</span>
             <button 
@@ -401,7 +403,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* BACKUP, REVISIONS & VAULT */}
           <div className="flex items-center gap-1 border-l border-white/10 pl-3">
             <button
               onClick={handleExportBackup}
@@ -420,7 +421,7 @@ export default function App() {
             <button
               onClick={() => fileInputRef.current?.click()}
               className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              title="Import JSON Backup (With Safety Merge Dialog)"
+              title="Import Specific Tracks from JSON"
             >
               <Upload size={14} />
             </button>
@@ -458,8 +459,6 @@ export default function App() {
         
         {/* STICKY COLUMN TITLES BAR */}
         <div className="h-10 border-b border-white/5 bg-[#0a0a0a] flex shrink-0 z-30">
-          
-          {/* Habits Header */}
           <div 
             style={{ width: `${habitRailWidth}px` }} 
             className="border-r border-white/5 flex items-center justify-around px-2 shrink-0 relative"
@@ -506,12 +505,10 @@ export default function App() {
             </button>
           </div>
 
-          {/* Date Label Spacer */}
           <div className="w-28 border-r border-white/5 flex items-center justify-center shrink-0">
             <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
           </div>
 
-          {/* Task Column Headers */}
           <div className="flex-1 relative overflow-hidden min-w-max">
             {activeTasks.map((task, idx) => (
               <div
@@ -521,7 +518,6 @@ export default function App() {
                   selectedTaskId === task.id ? 'text-white' : 'text-neutral-400 hover:text-neutral-200'
                 }`}
               >
-                {/* Live color dot & quick picker */}
                 <input
                   type="color"
                   value={task.hex}
@@ -547,7 +543,6 @@ export default function App() {
                   </span>
                 )}
 
-                {/* Name History Icon */}
                 <button
                   onClick={() => setHistoryModalTask(task)}
                   className="text-neutral-600 hover:text-neutral-300 transition-colors cursor-pointer"
@@ -571,7 +566,6 @@ export default function App() {
           ref={scrollContainerRef}
           className="flex-1 overflow-y-auto overflow-x-hidden flex relative bg-[#050505] no-scrollbar"
         >
-          {/* Merged Continuous Habit Rails */}
           <div 
             style={{ width: `${habitRailWidth}px`, height: `${totalStreamHeight}px` }} 
             className="border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative"
@@ -622,7 +616,6 @@ export default function App() {
             })}
           </div>
 
-          {/* Dates Column: Yellow Marked Sundays */}
           <div className="w-28 border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative shadow-[10px_0_20px_rgba(0,0,0,0.4)]" style={{ height: `${totalStreamHeight}px` }}>
             {TIMELINE_DAYS.map((d) => (
               <div 
@@ -656,7 +649,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Main Continuous Canvas */}
           <div className="flex-1 relative min-w-max" style={{ height: `${totalStreamHeight}px` }}>
             <StaticGridWires currentDay={currentDay} />
             <DynamicFluidLayer 
@@ -679,7 +671,6 @@ export default function App() {
           </span>
           {selectedTask && (
             <div className="flex items-center gap-3 ml-4">
-              {/* Color Tweak Tool */}
               <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 border border-white/10">
                 <Palette size={11} className="text-neutral-400" />
                 <input
@@ -691,7 +682,6 @@ export default function App() {
                 />
               </div>
 
-              {/* Archive Column Button */}
               <button
                 onClick={() => handleArchiveTask(selectedTask.id)}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
@@ -935,50 +925,84 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* MODAL: SMART IMPORT CONFIRMATION */}
+      {/* MODAL: SELECTIVE TRACK IMPORT INSPECTOR */}
       {/* ========================================================= */}
-      {importConfirmData && (
-        <div className="absolute inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
-            <div>
-              <span className="text-xs font-black uppercase tracking-widest text-amber-400 block mb-1">Import Options</span>
-              <p className="text-xs text-neutral-300">
-                Found {importConfirmData.tasks?.length} tasks in file. Choose how to handle your current active board:
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => applyImportChoice('merge')}
-                className="w-full text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
+      {importFilePayload && (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <div>
+                <span className="text-xs font-black uppercase tracking-widest text-white block">
+                  Inspect & Restore Tracks
+                </span>
+                <span className="text-[10px] text-neutral-400">
+                  Select specific tasks to extract from this backup:
+                </span>
+              </div>
+              <button 
+                onClick={() => setImportFilePayload(null)} 
+                className="text-neutral-500 hover:text-white cursor-pointer"
               >
-                <div className="text-[11px] font-bold uppercase text-white">1. Merge & Combine</div>
-                <div className="text-[10px] text-neutral-400">Keep current tasks and append imported tasks to the right.</div>
-              </button>
-
-              <button
-                onClick={() => applyImportChoice('vault_current')}
-                className="w-full text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
-              >
-                <div className="text-[11px] font-bold uppercase text-amber-400">2. Vault Current & Replace</div>
-                <div className="text-[10px] text-neutral-400">Move current active tasks to Vault, then load imported file.</div>
-              </button>
-
-              <button
-                onClick={() => applyImportChoice('overwrite')}
-                className="w-full text-left p-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
-              >
-                <div className="text-[11px] font-bold uppercase text-red-400">3. Full Overwrite</div>
-                <div className="text-[10px] text-neutral-400">Completely replace everything with the backup file.</div>
+                <X size={16} />
               </button>
             </div>
 
-            <button
-              onClick={() => setImportConfirmData(null)}
-              className="w-full py-2 border border-white/10 hover:bg-white/5 text-neutral-400 text-[10px] font-bold uppercase rounded-lg cursor-pointer"
-            >
-              Cancel Import
-            </button>
+            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
+              {importFilePayload.tasks?.map((t) => {
+                const isSelected = selectedImportTaskIds.has(t.id);
+                const loggedDays = t.matrix ? t.matrix.filter((v) => v > 0).length : 0;
+
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => toggleImportSelection(t.id)}
+                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-colors ${
+                      isSelected 
+                        ? 'bg-white/10 border-white/30 text-white' 
+                        : 'bg-[#141414] border-white/5 text-neutral-500 hover:border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="rounded bg-black border-white/20 accent-white cursor-pointer"
+                      />
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.hex }} />
+                      <span className="text-xs font-bold uppercase">{t.title}</span>
+                    </div>
+                    <span className="text-[9px] font-mono text-neutral-400">{loggedDays} Days</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
+              <button
+                disabled={selectedImportTaskIds.size === 0}
+                onClick={() => handleExecuteSelectiveImport('active')}
+                className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
+                  selectedImportTaskIds.size === 0 
+                    ? 'bg-white/5 text-white/20 cursor-default' 
+                    : 'bg-white text-black hover:bg-neutral-200 cursor-pointer'
+                }`}
+              >
+                Restore Selected to Timeline ({selectedImportTaskIds.size})
+              </button>
+
+              <button
+                disabled={selectedImportTaskIds.size === 0}
+                onClick={() => handleExecuteSelectiveImport('vault')}
+                className={`w-full py-2 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-colors border ${
+                  selectedImportTaskIds.size === 0 
+                    ? 'border-white/5 text-white/20 cursor-default' 
+                    : 'border-amber-400/40 text-amber-400 hover:bg-amber-400/10 cursor-pointer'
+                }`}
+              >
+                Send Selected Straight to Vault
+              </button>
+            </div>
           </div>
         </div>
       )}
