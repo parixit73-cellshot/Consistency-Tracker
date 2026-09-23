@@ -12,13 +12,11 @@ export function TaskNotesCallout({
   const panelRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Sync internal state if task updates
   useEffect(() => {
     setContent(task.notes || '');
     setFontSize(task.notesFontSize || 'text-xs');
   }, [task.notes, task.notesFontSize]);
 
-  // Click outside to close and save
   useEffect(() => {
     function handleClickOutside(e) {
       if (panelRef.current && !panelRef.current.contains(e.target)) {
@@ -76,29 +74,25 @@ export function TaskNotesCallout({
     <div 
       ref={panelRef}
       style={{ top: `${topPos}px` }} 
-      className="absolute right-0 z-30 flex items-start"
+      className="absolute -right-3 z-30 flex items-start pointer-events-auto"
+      onClick={(e) => e.stopPropagation()}
     >
-      {/* Pull Tab Indicator */}
+      {/* Pull Tab Indicator: Snug on the right edge of the track pill */}
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen((prev) => !prev);
-        }}
-        className={`w-4 h-9 rounded-l-md border border-r-0 border-white/20 bg-[#121212] flex items-center justify-center hover:w-5 hover:bg-[#181818] transition-all cursor-pointer shadow-md ${
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`w-3.5 h-7 rounded-r-md border border-l-0 border-white/20 bg-[#121212] flex items-center justify-center hover:w-4 hover:bg-[#1a1a1a] transition-all cursor-pointer shadow-md ${
           task.notes?.trim() ? 'text-amber-400' : 'text-neutral-500 hover:text-white'
         }`}
         title="Open Task Callout Note"
       >
-        <FileText size={10} />
+        <FileText size={9} />
       </button>
 
       {/* Floating Note Callout Box */}
       {isOpen && (
         <div 
-          onClick={(e) => e.stopPropagation()}
-          className="absolute left-4 top-0 w-64 bg-[#111111] border border-white/20 rounded-xl shadow-2xl p-3 flex flex-col gap-2.5 backdrop-blur-md pointer-events-auto"
+          className="absolute left-5 top-0 w-64 bg-[#111111] border border-white/20 rounded-xl shadow-2xl p-3 flex flex-col gap-2.5 backdrop-blur-md z-50"
         >
-          {/* Top Control Bar */}
           <div className="flex items-center justify-between pb-2 border-b border-white/10">
             <span className="text-[10px] font-black uppercase tracking-wider text-white truncate max-w-[120px]">
               {task.title} Notes
@@ -149,7 +143,6 @@ export function TaskNotesCallout({
             </div>
           </div>
 
-          {/* Free-text Editor Area */}
           <textarea
             ref={textareaRef}
             rows={5}
@@ -161,7 +154,7 @@ export function TaskNotesCallout({
           />
 
           <div className="flex justify-between items-center text-[9px] text-neutral-500">
-            <span>Auto-saved to track</span>
+            <span>Auto-saved</span>
             <span className="font-mono">{content.length} chars</span>
           </div>
         </div>

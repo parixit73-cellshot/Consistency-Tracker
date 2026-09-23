@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, History, Trash2, Edit2, Check } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, History } from 'lucide-react';
 import { 
   ROW_HEIGHT, 
   TRACK_WIDTH, 
@@ -68,10 +68,10 @@ export function TimelineStream({
     <div className="flex-1 flex flex-col overflow-hidden relative">
       <div className="h-14 border-b border-white/5 bg-[#0a0a0a] flex shrink-0 z-30">
         
-        {/* Habits Header */}
+        {/* Habits Header: Exact mathematical X match with the vertical rail lines below */}
         <div 
           style={{ width: `${habitRailWidth}px` }} 
-          className="border-r border-white/5 flex items-center justify-around px-2 shrink-0 relative"
+          className="border-r border-white/5 relative shrink-0"
           ref={popoverRef}
         >
           {habits.map((h, idx) => {
@@ -80,13 +80,19 @@ export function TimelineStream({
             const isPopoverOpen = activeHabitPopover === h.id;
             const completedCount = h.data?.filter(Boolean).length || 0;
             const pastNames = (h.nameHistory || []).slice(-4, -1).reverse();
+            // EXACT SAME X CALCULATION AS THE TRACK RAILS:
+            const laneX = (habitRailWidth / (habits.length + 1)) * (idx + 1);
 
             return (
-              <div key={`${h.id}-${idx}`} className="relative flex items-center justify-center">
+              <div 
+                key={`${h.id}-${idx}`} 
+                style={{ left: `${laneX}px` }}
+                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+              >
                 <button
                   onClick={() => isPopoverOpen ? setActiveHabitPopover(null) : handleOpenPopover(h)}
                   style={{
-                    transform: isStaggered ? 'translateY(6px)' : 'translateY(-6px)',
+                    transform: isStaggered ? 'translateY(8px)' : 'translateY(-8px)',
                     borderColor: `${h.hex}60`,
                     color: h.hex,
                   }}
@@ -97,7 +103,7 @@ export function TimelineStream({
                 </button>
 
                 {isPopoverOpen && (
-                  <div className="absolute top-12 -left-14 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
+                  <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
                     <div className="flex items-center justify-between">
                       {habitInlineEdit ? (
                         <div className="flex items-center gap-1 w-full mr-2">
@@ -169,7 +175,7 @@ export function TimelineStream({
           <button
             onClick={onOpenHabitModal}
             title="Add Habit Lane"
-            className="p-1 hover:bg-white/10 rounded text-neutral-500 hover:text-white transition-colors cursor-pointer"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded text-neutral-500 hover:text-white transition-colors cursor-pointer"
           >
             <Plus size={12} />
           </button>
@@ -180,7 +186,7 @@ export function TimelineStream({
           <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
         </div>
 
-        {/* Task Column Headers */}
+        {/* Task Headers */}
         <div className="flex-1 relative overflow-hidden min-w-max">
           {tasks.map((task, idx) => (
             <div
@@ -243,7 +249,7 @@ export function TimelineStream({
         </div>
       </div>
 
-      {/* UNIFIED VERTICAL SCROLL STREAM */}
+      {/* UNIFIED SCROLL STREAM */}
       <div 
         ref={scrollRef}
         className="flex-1 overflow-y-auto overflow-x-hidden flex relative bg-[#050505] no-scrollbar"
@@ -362,10 +368,10 @@ export function TimelineStream({
               const isSelected = selectedTaskId === task.id;
               const { blocks, cords } = parseTaskMatrix(task, currentDay);
 
-              // Position pull tab alongside the top block, or Today's row
+              // Anchor tab directly to the latest/top fluid block, or Today's line
               const pullTabTop = blocks.length > 0 
-                ? CANVAS_PAD_Y + blocks[0].start * ROW_HEIGHT + 16 
-                : CANVAS_PAD_Y + currentDay * ROW_HEIGHT + 16;
+                ? CANVAS_PAD_Y + blocks[blocks.length - 1].start * ROW_HEIGHT + 14 
+                : CANVAS_PAD_Y + currentDay * ROW_HEIGHT + 14;
 
               return (
                 <div
@@ -376,15 +382,10 @@ export function TimelineStream({
                   }`}
                   onClick={() => onSelectTask(task.id)}
                 >
+                  {/* Central Wire */}
                   <div className="absolute inset-y-0 w-[1px] bg-white/5 pointer-events-none" />
 
-                  {/* Task Notes Pull-Tab */}
-                  <TaskNotesCallout 
-                    task={task} 
-                    topPos={pullTabTop} 
-                    onSaveNotes={onSaveTaskNotes} 
-                  />
-
+                  {/* Umbilical Cords */}
                   {cords.map((cord, cIdx) => {
                     const top = CANVAS_PAD_Y + cord.startY * ROW_HEIGHT;
                     const height = (cord.endY - cord.startY) * ROW_HEIGHT;
@@ -402,25 +403,35 @@ export function TimelineStream({
                     );
                   })}
 
-                  {blocks.map((block, bIdx) => {
-                    const top = CANVAS_PAD_Y + block.start * ROW_HEIGHT;
-                    const height = block.days * ROW_HEIGHT;
+                  {/* Fluid Block Trackers */}
+                  <div className="relative flex justify-center" style={{ width: `${TRACK_WIDTH}px` }}>
+                    {blocks.map((block, bIdx) => {
+                      const top = CANVAS_PAD_Y + block.start * ROW_HEIGHT;
+                      const height = block.days * ROW_HEIGHT;
 
-                    return (
-                      <div
-                        key={bIdx}
-                        style={{ 
-                          top: `${top}px`, 
-                          height: `${height}px`, 
-                          width: `${TRACK_WIDTH}px`,
-                          backgroundColor: task.hex
-                        }}
-                        className="absolute rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center pointer-events-none transition-all duration-200"
-                      >
-                        <span className="text-[10px] font-black text-black/70 rotate-90">{block.days}d</span>
-                      </div>
-                    );
-                  })}
+                      return (
+                        <div
+                          key={bIdx}
+                          style={{ 
+                            top: `${top}px`, 
+                            height: `${height}px`, 
+                            width: `${TRACK_WIDTH}px`,
+                            backgroundColor: task.hex
+                          }}
+                          className="absolute rounded-full shadow-[0_4px_24px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center pointer-events-none transition-all duration-200"
+                        >
+                          <span className="text-[10px] font-black text-black/70 rotate-90">{block.days}d</span>
+                        </div>
+                      );
+                    })}
+
+                    {/* Pull-Tab anchored directly to the 44px pill container edge */}
+                    <TaskNotesCallout 
+                      task={task} 
+                      topPos={pullTabTop} 
+                      onSaveNotes={onSaveTaskNotes} 
+                    />
+                  </div>
                 </div>
               );
             })}
