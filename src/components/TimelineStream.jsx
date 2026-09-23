@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, History, Trash2 } from 'lucide-react';
+import { Plus, X, History, Trash2, Edit2, Check } from 'lucide-react';
 import { 
   ROW_HEIGHT, 
   TRACK_WIDTH, 
@@ -10,6 +10,7 @@ import {
   parseHabitBlocks, 
   parseTaskMatrix 
 } from '../trackerStore';
+import { TaskNotesCallout } from './TaskNotesCallout';
 
 export function TimelineStream({
   scrollRef,
@@ -27,31 +28,47 @@ export function TimelineStream({
   setEditValue,
   onStartRename,
   onSaveRename,
+  onRenameHabit,
+  onSaveTaskNotes,
   onOpenHistory
 }) {
   const totalStreamHeight = CANVAS_PAD_Y + TIMELINE_DAYS.length * ROW_HEIGHT + 120;
   const habitRailWidth = Math.max(140, habits.length * 36 + 28);
 
-  // FIX 2: Popover tooltip state for habits
   const [activeHabitPopover, setActiveHabitPopover] = useState(null);
+  const [habitInlineEdit, setHabitInlineEdit] = useState(false);
+  const [habitInputValue, setHabitInputValue] = useState('');
   const popoverRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(e) {
       if (popoverRef.current && !popoverRef.current.contains(e.target)) {
         setActiveHabitPopover(null);
+        setHabitInlineEdit(false);
       }
     }
     window.addEventListener('mousedown', handleClickOutside);
     return () => window.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleOpenPopover = (habit) => {
+    setActiveHabitPopover(habit.id);
+    setHabitInputValue(habit.label);
+    setHabitInlineEdit(false);
+  };
+
+  const handleCommitHabitRename = (habitId) => {
+    if (habitInputValue.trim()) {
+      onRenameHabit(habitId, habitInputValue.trim());
+    }
+    setHabitInlineEdit(false);
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-      {/* STICKY COLUMN TITLES BAR (h-14 to comfortably accommodate 2-row layout) */}
       <div className="h-14 border-b border-white/5 bg-[#0a0a0a] flex shrink-0 z-30">
         
-        {/* FIX 2: Habits Header with Alternating Single-Letter Badges */}
+        {/* Habits Header */}
         <div 
           style={{ width: `${habitRailWidth}px` }} 
           className="border-r border-white/5 flex items-center justify-around px-2 shrink-0 relative"
@@ -61,12 +78,13 @@ export function TimelineStream({
             const firstLetter = (h.label || '?').charAt(0).toUpperCase();
             const isStaggered = idx % 2 === 1;
             const isPopoverOpen = activeHabitPopover === h.id;
-            const completedCount = h.data.filter(Boolean).length;
+            const completedCount = h.data?.filter(Boolean).length || 0;
+            const pastNames = (h.nameHistory || []).slice(-4, -1).reverse();
 
             return (
               <div key={`${h.id}-${idx}`} className="relative flex items-center justify-center">
                 <button
-                  onClick={() => setActiveHabitPopover(isPopoverOpen ? null : h.id)}
+                  onClick={() => isPopoverOpen ? setActiveHabitPopover(null) : handleOpenPopover(h)}
                   style={{
                     transform: isStaggered ? 'translateY(6px)' : 'translateY(-6px)',
                     borderColor: `${h.hex}60`,
@@ -78,20 +96,47 @@ export function TimelineStream({
                   {firstLetter}
                 </button>
 
-                {/* Floating Habit Tooltip / Popover */}
                 {isPopoverOpen && (
-                  <div className="absolute top-12 -left-12 z-50 w-44 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2 pointer-events-auto">
+                  <div className="absolute top-12 -left-14 z-50 w-48 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2.5 pointer-events-auto">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: h.hex }} />
-                        <span className="text-xs font-black text-white uppercase">{h.label}</span>
-                      </div>
+                      {habitInlineEdit ? (
+                        <div className="flex items-center gap-1 w-full mr-2">
+                          <input
+                            type="text"
+                            maxLength={8}
+                            autoFocus
+                            value={habitInputValue}
+                            onChange={(e) => setHabitInputValue(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleCommitHabitRename(h.id)}
+                            className="w-full bg-black border border-white/30 rounded px-1.5 py-0.5 text-xs text-white uppercase outline-none"
+                          />
+                          <button
+                            onClick={() => handleCommitHabitRename(h.id)}
+                            className="p-1 hover:bg-white/10 rounded text-emerald-400 cursor-pointer"
+                          >
+                            <Check size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: h.hex }} />
+                          <span className="text-xs font-black text-white uppercase">{h.label}</span>
+                          <button
+                            onClick={() => setHabitInlineEdit(true)}
+                            className="text-neutral-500 hover:text-white transition-colors p-0.5 cursor-pointer"
+                            title="Rename"
+                          >
+                            <Edit2 size={10} />
+                          </button>
+                        </div>
+                      )}
+
                       <button 
                         onClick={(e) => {
                           onDeleteHabit(e, h.id);
                           setActiveHabitPopover(null);
                         }} 
-                        className="text-red-400 hover:text-red-300 transition-colors p-1"
+                        className="text-red-400 hover:text-red-300 transition-colors p-1 cursor-pointer"
                         title="Delete habit"
                       >
                         <Trash2 size={12} />
@@ -102,16 +147,19 @@ export function TimelineStream({
                       Logged Days: <span className="text-white font-bold">{completedCount}</span>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        const newName = window.prompt('Rename habit:', h.label);
-                        if (newName) onSaveRename('habit', h.id, newName);
-                        setActiveHabitPopover(null);
-                      }}
-                      className="text-[9px] text-neutral-400 hover:text-white uppercase font-bold text-left pt-1 border-t border-white/5"
-                    >
-                      Click to rename
-                    </button>
+                    {pastNames.length > 0 && (
+                      <div className="pt-2 border-t border-white/5 flex flex-col gap-1">
+                        <span className="text-[8px] uppercase tracking-wider font-bold text-neutral-500">
+                          Past Names (Up to 3):
+                        </span>
+                        {pastNames.map((item, nIdx) => (
+                          <div key={nIdx} className="text-[9px] text-neutral-400 flex justify-between">
+                            <span className="font-semibold text-neutral-300">• {item.title}</span>
+                            <span className="text-neutral-600 font-mono">{item.at}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -132,7 +180,7 @@ export function TimelineStream({
           <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
         </div>
 
-        {/* FIX 3: Task Column Headers (Stacked: Title + Icons on Row 1, Centered Streak on Row 2) */}
+        {/* Task Column Headers */}
         <div className="flex-1 relative overflow-hidden min-w-max">
           {tasks.map((task, idx) => (
             <div
@@ -142,7 +190,6 @@ export function TimelineStream({
                 selectedTaskId === task.id ? 'text-white' : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              {/* Row 1: Color Dot, Title, History Clock */}
               <div className="flex items-center gap-1.5 justify-center w-full px-2">
                 <input
                   type="color"
@@ -182,7 +229,6 @@ export function TimelineStream({
                 </button>
               </div>
 
-              {/* Row 2: Centered Streak Counter */}
               <div className="h-4 flex items-center justify-center">
                 {task.streak > 0 ? (
                   <span className="text-[10px] text-amber-500 font-bold drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
@@ -208,7 +254,7 @@ export function TimelineStream({
           className="border-r border-white/5 bg-[#080808]/90 shrink-0 z-10 relative"
         >
           {habits.map((habit, hIdx) => {
-            const blocks = parseHabitBlocks(habit.data);
+            const blocks = parseHabitBlocks(habit.data || []);
             const laneX = (habitRailWidth / (habits.length + 1)) * (hIdx + 1);
 
             return (
@@ -243,7 +289,7 @@ export function TimelineStream({
                   >
                     {d.dayIndex === currentDay && (
                       <div className={`w-3 h-3 rounded-full border border-dashed border-white/20 hover:border-white/50 transition-colors ${
-                        habit.data[d.dayIndex] ? 'opacity-0' : 'opacity-100'
+                        habit.data?.[d.dayIndex] ? 'opacity-0' : 'opacity-100'
                       }`} />
                     )}
                   </div>
@@ -316,6 +362,11 @@ export function TimelineStream({
               const isSelected = selectedTaskId === task.id;
               const { blocks, cords } = parseTaskMatrix(task, currentDay);
 
+              // Position pull tab alongside the top block, or Today's row
+              const pullTabTop = blocks.length > 0 
+                ? CANVAS_PAD_Y + blocks[0].start * ROW_HEIGHT + 16 
+                : CANVAS_PAD_Y + currentDay * ROW_HEIGHT + 16;
+
               return (
                 <div
                   key={`${task.id}-${idx}`}
@@ -326,6 +377,13 @@ export function TimelineStream({
                   onClick={() => onSelectTask(task.id)}
                 >
                   <div className="absolute inset-y-0 w-[1px] bg-white/5 pointer-events-none" />
+
+                  {/* Task Notes Pull-Tab */}
+                  <TaskNotesCallout 
+                    task={task} 
+                    topPos={pullTabTop} 
+                    onSaveNotes={onSaveTaskNotes} 
+                  />
 
                   {cords.map((cord, cIdx) => {
                     const top = CANVAS_PAD_Y + cord.startY * ROW_HEIGHT;

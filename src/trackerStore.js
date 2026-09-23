@@ -25,9 +25,9 @@ export const TIMELINE_DAYS = Array.from({ length: 28 }, (_, i) => {
   };
 });
 
-const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v4';
-const STORAGE_HABITS_KEY = 'flow_tracker_habits_v4';
-const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_v4';
+const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v5';
+const STORAGE_HABITS_KEY = 'flow_tracker_habits_v5';
+const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_v5';
 
 export const INITIAL_HABITS = [
   { 
@@ -60,6 +60,8 @@ export const INITIAL_TASKS = [
     hex: '#34d399',
     streak: 3,
     isArchived: false,
+    notes: '• Storyboard review completed\n• Keyframing scene 3 next',
+    notesFontSize: 'text-xs',
     nameHistory: [{ title: '2D Animation', at: '2026-09-06' }],
     matrix: [
       0, 1, 1, 1, 0, 0, 0,
@@ -74,6 +76,8 @@ export const INITIAL_TASKS = [
     hex: '#818cf8',
     streak: 0,
     isArchived: false,
+    notes: '',
+    notesFontSize: 'text-xs',
     nameHistory: [{ title: 'Motor Design', at: '2026-09-06' }],
     matrix: new Array(28).fill(0),
   },
@@ -83,6 +87,8 @@ export const INITIAL_TASKS = [
     hex: '#fbbf24',
     streak: 5,
     isArchived: false,
+    notes: '• Rigging arms and fingers\n• Shading pass on Saturday',
+    notesFontSize: 'text-xs',
     nameHistory: [
       { title: '3D Modeling', at: '2026-09-08' },
       { title: '3D Animation', at: '2026-09-14' }
@@ -111,6 +117,8 @@ export function sanitizeTask(t) {
     hex: t.hex || '#34d399',
     streak: typeof t.streak === 'number' ? t.streak : 0,
     isArchived: Boolean(t.isArchived),
+    notes: typeof t.notes === 'string' ? t.notes : '',
+    notesFontSize: t.notesFontSize || 'text-xs',
     nameHistory: Array.isArray(t.nameHistory) ? t.nameHistory : [{ title: t.title || 'Init', at: 'Init' }],
     matrix: Array.isArray(t.matrix) ? t.matrix : new Array(28).fill(0),
   };
@@ -321,6 +329,14 @@ export function updateTaskColor(tasks, taskId, newHex) {
   return tasks.map((t) => (t.id === taskId ? { ...t, hex: newHex } : t));
 }
 
+export function updateTaskNotes(tasks, taskId, notesContent, fontSize) {
+  return tasks.map((t) => (t.id === taskId ? { 
+    ...t, 
+    notes: notesContent, 
+    notesFontSize: fontSize || t.notesFontSize || 'text-xs' 
+  } : t));
+}
+
 export function insertNewTask(tasks, { title, hex, position }, totalDays) {
   const newTask = {
     id: generateSafeId('col'),
@@ -328,6 +344,8 @@ export function insertNewTask(tasks, { title, hex, position }, totalDays) {
     hex: hex || '#34d399',
     streak: 0,
     isArchived: false,
+    notes: '',
+    notesFontSize: 'text-xs',
     nameHistory: [{ title: title.trim(), at: new Date().toISOString().split('T')[0] }],
     matrix: new Array(totalDays).fill(0),
   };

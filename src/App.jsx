@@ -17,6 +17,7 @@ import {
   renameTask,
   renameHabit,
   updateTaskColor,
+  updateTaskNotes,
   insertNewTask,
   insertNewHabit,
 } from './trackerStore';
@@ -143,7 +144,6 @@ export default function App() {
       try {
         const parsed = JSON.parse(ev.target.result);
         if (parsed.tasks && Array.isArray(parsed.tasks)) {
-          // Sanitize every incoming task to protect against white screens
           const cleanTasks = parsed.tasks.map(sanitizeTask);
           setImportFilePayload({ ...parsed, tasks: cleanTasks });
           setSelectedImportTaskIds(new Set(cleanTasks.map((t) => t.id)));
@@ -171,6 +171,10 @@ export default function App() {
     setTasks((prev) => [...prev, ...tasksToBringIn]);
     setImportFilePayload(null);
   };
+
+  const handleSaveNotes = useCallback((taskId, content, fontSize) => {
+    setTasks((prev) => updateTaskNotes(prev, taskId, content, fontSize));
+  }, []);
 
   const selectedTask = activeTasks.find((t) => t.id === selectedTaskId);
   const todayStatus = selectedTask ? selectedTask.matrix[currentDay] : 0;
@@ -278,6 +282,7 @@ export default function App() {
           setHabits((prevH) => renameHabit(prevH, id, newLabel));
           return prev;
         })}
+        onSaveTaskNotes={handleSaveNotes}
         onOpenHistory={setHistoryModalTask}
       />
 
