@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Archive, RefreshCw, Layers } from 'lucide-react';
+import { X, Archive, RefreshCw, Layers, History } from 'lucide-react';
 
 export function ImportInspectorModal({
   payload,
@@ -8,7 +8,7 @@ export function ImportInspectorModal({
   onExecuteImport,
   onClose
 }) {
-  if (!payload) return null;
+  if (!payload || !Array.isArray(payload.tasks)) return null;
 
   return (
     <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -28,13 +28,13 @@ export function ImportInspectorModal({
         </div>
 
         <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
-          {payload.tasks?.map((t) => {
+          {payload.tasks.map((t, idx) => {
             const isSelected = selectedIds.has(t.id);
-            const loggedDays = t.matrix ? t.matrix.filter((v) => v > 0).length : 0;
+            const loggedDays = Array.isArray(t.matrix) ? t.matrix.filter((v) => v > 0).length : 0;
 
             return (
               <div
-                key={t.id}
+                key={`${t.id}-${idx}`}
                 onClick={() => onToggleSelection(t.id)}
                 className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-colors ${
                   isSelected 
@@ -49,8 +49,8 @@ export function ImportInspectorModal({
                     onChange={() => {}}
                     className="rounded bg-black border-white/20 accent-white cursor-pointer"
                   />
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.hex }} />
-                  <span className="text-xs font-bold uppercase">{t.title}</span>
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.hex || '#34d399' }} />
+                  <span className="text-xs font-bold uppercase">{t.title || 'Untitled'}</span>
                 </div>
                 <span className="text-[9px] font-mono text-neutral-400">{loggedDays} Days</span>
               </div>
@@ -110,14 +110,14 @@ export function RevisionsModal({
         </div>
 
         <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
-          {revisions.length === 0 ? (
+          {(!revisions || revisions.length === 0) ? (
             <div className="text-center py-8 text-neutral-600 text-xs">No previous snapshots stored.</div>
           ) : (
             revisions.map((rev) => (
               <div key={rev.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#141414] border border-white/5">
                 <div>
                   <div className="text-xs font-bold text-white">{rev.reason}</div>
-                  <div className="text-[9px] text-neutral-500">{rev.at} · {rev.tasks?.length} Tasks</div>
+                  <div className="text-[9px] text-neutral-500">{rev.at} · {rev.tasks?.length || 0} Tasks</div>
                 </div>
                 <button
                   onClick={() => onRollback(rev)}
@@ -169,23 +169,37 @@ export function VaultDrawer({
           </div>
 
           <div className="mt-6 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-180px)] pr-2">
-            {archivedTasks.length === 0 ? (
+            {(!archivedTasks || archivedTasks.length === 0) ? (
               <div className="text-center py-12 text-neutral-600 text-xs tracking-wider uppercase font-bold">
                 No archived tasks in the vault.
               </div>
             ) : (
-              archivedTasks.map((t) => {
-                const loggedDays = t.matrix.filter((v) => v > 0).length;
+              archivedTasks.map((t, idx) => {
+                const loggedDays = Array.isArray(t.matrix) ? t.matrix.filter((v) => v > 0).length : 0;
+                const history = Array.isArray(t.nameHistory) ? t.nameHistory : [];
 
                 return (
-                  <div key={t.id} className="bg-[#121212] border border-white/10 rounded-xl p-4 flex flex-col gap-3">
+                  <div key={`${t.id}-${idx}`} className="bg-[#121212] border border-white/10 rounded-xl p-4 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.hex }} />
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.hex || '#34d399' }} />
                         <span className="text-xs font-black text-white uppercase">{t.title}</span>
                       </div>
                       <span className="text-[10px] text-neutral-500 font-bold">{loggedDays} Days Total</span>
                     </div>
+
+                    {history.length > 1 && (
+                      <div className="bg-black/40 p-2 rounded text-[9px] text-neutral-400 flex flex-col gap-1">
+                        <span className="font-bold text-neutral-500 flex items-center gap-1">
+                          <History size={10} /> Name History:
+                        </span>
+                        {history.map((h, hIdx) => (
+                          <span key={hIdx} className="pl-3 border-l border-white/10">
+                            • {h.title} <span className="text-neutral-600">({h.at})</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between pt-2 border-t border-white/5">
                       <button

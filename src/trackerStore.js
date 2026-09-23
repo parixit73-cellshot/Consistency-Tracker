@@ -25,28 +25,37 @@ export const TIMELINE_DAYS = Array.from({ length: 28 }, (_, i) => {
   };
 });
 
-const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v3';
-const STORAGE_HABITS_KEY = 'flow_tracker_habits_v3';
-const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_v3';
+const STORAGE_TASKS_KEY = 'flow_tracker_tasks_v4';
+const STORAGE_HABITS_KEY = 'flow_tracker_habits_v4';
+const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_v4';
 
 export const INITIAL_HABITS = [
   { 
-    id: 'habit-1', label: 'CODE', hex: '#22d3ee', 
+    id: 'habit-code', 
+    label: 'CODE', 
+    hex: '#22d3ee', 
+    nameHistory: [{ title: 'CODE', at: '2026-09-06' }],
     data: [1, 1, 1, 1, 1, 0, 0,  1, 1, 1, 1, 0, 1, 1,  1, 1, 1, 1, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   },
   { 
-    id: 'habit-2', label: 'GYM', hex: '#fb7185', 
+    id: 'habit-gym', 
+    label: 'GYM', 
+    hex: '#fb7185', 
+    nameHistory: [{ title: 'GYM', at: '2026-09-06' }],
     data: [0, 1, 0, 1, 1, 0, 0,  0, 1, 0, 1, 1, 0, 0,  0, 1, 0, 1, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   },
   { 
-    id: 'habit-3', label: 'DIET', hex: '#34d399', 
+    id: 'habit-diet', 
+    label: 'DIET', 
+    hex: '#34d399', 
+    nameHistory: [{ title: 'DIET', at: '2026-09-06' }],
     data: [1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 1, 1, 1, 0,  1, 1, 1, 0, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0] 
   }
 ];
 
 export const INITIAL_TASKS = [
   {
-    id: 'col-1',
+    id: 'col-2d-anim',
     title: '2D Animation',
     hex: '#34d399',
     streak: 3,
@@ -60,7 +69,7 @@ export const INITIAL_TASKS = [
     ],
   },
   {
-    id: 'col-2',
+    id: 'col-motor-design',
     title: 'Motor Design',
     hex: '#818cf8',
     streak: 0,
@@ -69,7 +78,7 @@ export const INITIAL_TASKS = [
     matrix: new Array(28).fill(0),
   },
   {
-    id: 'col-3',
+    id: 'col-3d-anim',
     title: '3D Animation',
     hex: '#fbbf24',
     streak: 5,
@@ -87,10 +96,44 @@ export const INITIAL_TASKS = [
   },
 ];
 
+export function generateSafeId(prefix = 'id') {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+export function sanitizeTask(t) {
+  return {
+    ...t,
+    id: t.id || generateSafeId('col'),
+    title: t.title || 'Untitled',
+    hex: t.hex || '#34d399',
+    streak: typeof t.streak === 'number' ? t.streak : 0,
+    isArchived: Boolean(t.isArchived),
+    nameHistory: Array.isArray(t.nameHistory) ? t.nameHistory : [{ title: t.title || 'Init', at: 'Init' }],
+    matrix: Array.isArray(t.matrix) ? t.matrix : new Array(28).fill(0),
+  };
+}
+
+export function sanitizeHabit(h) {
+  return {
+    ...h,
+    id: h.id || generateSafeId('habit'),
+    label: (h.label || 'HABIT').substring(0, 8).toUpperCase(),
+    hex: h.hex || '#22d3ee',
+    nameHistory: Array.isArray(h.nameHistory) ? h.nameHistory : [{ title: h.label || 'Init', at: 'Init' }],
+    data: Array.isArray(h.data) ? h.data : new Array(28).fill(0),
+  };
+}
+
 export function loadPersistedTasks() {
   try {
     const saved = localStorage.getItem(STORAGE_TASKS_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed.map(sanitizeTask);
+    }
   } catch (e) {
     console.error(e);
   }
@@ -100,7 +143,10 @@ export function loadPersistedTasks() {
 export function loadPersistedHabits() {
   try {
     const saved = localStorage.getItem(STORAGE_HABITS_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed.map(sanitizeHabit);
+    }
   } catch (e) {
     console.error(e);
   }
@@ -122,7 +168,7 @@ export function persistState(tasks, habits, revisions = []) {
     localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(tasks));
     localStorage.setItem(STORAGE_HABITS_KEY, JSON.stringify(habits));
     if (revisions.length) {
-      localStorage.setItem(STORAGE_REVISIONS_KEY, JSON.stringify(revisions.slice(-20))); // Keep last 20 snapshots
+      localStorage.setItem(STORAGE_REVISIONS_KEY, JSON.stringify(revisions.slice(-20)));
     }
   } catch (e) {
     console.error('Persistence failed', e);
@@ -179,17 +225,20 @@ export function parseTaskMatrix(task, currentDay) {
 
   const cords = [];
   if (blocks.length > 0) {
-    if (task.streak > 0) {
+    if (task.streak > 0 && blocks[0].start < 7) {
       cords.push({ startY: 0, endY: blocks[0].start });
     }
+
     for (let b = 0; b < blocks.length - 1; b++) {
       const prevEnd = blocks[b].start + blocks[b].days;
       const nextStart = blocks[b + 1].start;
-      if (nextStart > prevEnd) {
+      const gapLength = nextStart - prevEnd;
+
+      if (gapLength > 0 && gapLength < 7) {
         cords.push({ startY: prevEnd, endY: nextStart });
       }
     }
-  } else if (task.streak > 0) {
+  } else if (task.streak > 0 && currentDay < 7) {
     cords.push({ startY: 0, endY: currentDay });
   }
 
@@ -255,13 +304,26 @@ export function renameTask(tasks, taskId, newTitle) {
   });
 }
 
+export function renameHabit(habits, habitId, newLabel) {
+  const trimmed = newLabel.trim().substring(0, 8).toUpperCase();
+  return habits.map((h) => {
+    if (h.id !== habitId || !trimmed || h.label === trimmed) return h;
+    const history = h.nameHistory || [];
+    return {
+      ...h,
+      label: trimmed,
+      nameHistory: [...history, { title: trimmed, at: new Date().toISOString().split('T')[0] }]
+    };
+  });
+}
+
 export function updateTaskColor(tasks, taskId, newHex) {
   return tasks.map((t) => (t.id === taskId ? { ...t, hex: newHex } : t));
 }
 
 export function insertNewTask(tasks, { title, hex, position }, totalDays) {
   const newTask = {
-    id: `col-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    id: generateSafeId('col'),
     title: title.trim().substring(0, 16),
     hex: hex || '#34d399',
     streak: 0,
@@ -278,9 +340,10 @@ export function insertNewTask(tasks, { title, hex, position }, totalDays) {
 
 export function insertNewHabit(habits, { label, hex, position }, totalDays) {
   const newHabit = {
-    id: `habit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-    label: label.trim().substring(0, 5).toUpperCase(),
+    id: generateSafeId('habit'),
+    label: label.trim().substring(0, 8).toUpperCase(),
     hex: hex || '#22d3ee',
+    nameHistory: [{ title: label.trim().substring(0, 8).toUpperCase(), at: new Date().toISOString().split('T')[0] }],
     data: new Array(totalDays).fill(0),
   };
 

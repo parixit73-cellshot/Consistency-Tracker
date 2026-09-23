@@ -1,5 +1,5 @@
-import React from 'react';
-import { Plus, X, History } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, X, History, Trash2 } from 'lucide-react';
 import { 
   ROW_HEIGHT, 
   TRACK_WIDTH, 
@@ -32,106 +32,166 @@ export function TimelineStream({
   const totalStreamHeight = CANVAS_PAD_Y + TIMELINE_DAYS.length * ROW_HEIGHT + 120;
   const habitRailWidth = Math.max(140, habits.length * 36 + 28);
 
+  // FIX 2: Popover tooltip state for habits
+  const [activeHabitPopover, setActiveHabitPopover] = useState(null);
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
+        setActiveHabitPopover(null);
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-      {/* STICKY COLUMN TITLES BAR */}
-      <div className="h-10 border-b border-white/5 bg-[#0a0a0a] flex shrink-0 z-30">
+      {/* STICKY COLUMN TITLES BAR (h-14 to comfortably accommodate 2-row layout) */}
+      <div className="h-14 border-b border-white/5 bg-[#0a0a0a] flex shrink-0 z-30">
+        
+        {/* FIX 2: Habits Header with Alternating Single-Letter Badges */}
         <div 
           style={{ width: `${habitRailWidth}px` }} 
           className="border-r border-white/5 flex items-center justify-around px-2 shrink-0 relative"
+          ref={popoverRef}
         >
-          {habits.map((h) => (
-            <div 
-              key={h.id} 
-              className="relative group/h flex items-center justify-center cursor-pointer"
-              onDoubleClick={() => onStartRename(h.id, h.label)}
-              title="Double click to rename"
-            >
-              {editingItemId === h.id ? (
-                <input
-                  type="text"
-                  maxLength={5}
-                  value={editValue}
-                  autoFocus
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => onSaveRename('habit', h.id)}
-                  onKeyDown={(e) => e.key === 'Enter' && onSaveRename('habit', h.id)}
-                  className="w-12 bg-black border border-white/30 rounded px-1 text-[9px] text-center text-white outline-none"
-                />
-              ) : (
-                <span className="text-[8px] tracking-wider text-neutral-500 group-hover/h:text-white font-black uppercase rotate-[-45deg] origin-bottom-left -translate-y-2 translate-x-2 transition-colors">
-                  {h.label}
-                </span>
-              )}
-              <button
-                onClick={(e) => onDeleteHabit(e, h.id)}
-                title={`Delete ${h.label}`}
-                className="absolute -top-1 -right-2 hidden group-hover/h:flex items-center justify-center w-3 h-3 bg-red-500/80 hover:bg-red-500 text-white rounded-full cursor-pointer z-40"
-              >
-                <X size={8} />
-              </button>
-            </div>
-          ))}
+          {habits.map((h, idx) => {
+            const firstLetter = (h.label || '?').charAt(0).toUpperCase();
+            const isStaggered = idx % 2 === 1;
+            const isPopoverOpen = activeHabitPopover === h.id;
+            const completedCount = h.data.filter(Boolean).length;
+
+            return (
+              <div key={`${h.id}-${idx}`} className="relative flex items-center justify-center">
+                <button
+                  onClick={() => setActiveHabitPopover(isPopoverOpen ? null : h.id)}
+                  style={{
+                    transform: isStaggered ? 'translateY(6px)' : 'translateY(-6px)',
+                    borderColor: `${h.hex}60`,
+                    color: h.hex,
+                  }}
+                  className="w-6 h-6 rounded-full border bg-[#121212] hover:scale-110 flex items-center justify-center text-[10px] font-black tracking-wider transition-transform cursor-pointer shadow-sm"
+                  title={`Click to view ${h.label}`}
+                >
+                  {firstLetter}
+                </button>
+
+                {/* Floating Habit Tooltip / Popover */}
+                {isPopoverOpen && (
+                  <div className="absolute top-12 -left-12 z-50 w-44 bg-[#141414] border border-white/20 rounded-xl p-3 shadow-2xl flex flex-col gap-2 pointer-events-auto">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: h.hex }} />
+                        <span className="text-xs font-black text-white uppercase">{h.label}</span>
+                      </div>
+                      <button 
+                        onClick={(e) => {
+                          onDeleteHabit(e, h.id);
+                          setActiveHabitPopover(null);
+                        }} 
+                        className="text-red-400 hover:text-red-300 transition-colors p-1"
+                        title="Delete habit"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+
+                    <div className="text-[10px] text-neutral-400 font-mono">
+                      Logged Days: <span className="text-white font-bold">{completedCount}</span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const newName = window.prompt('Rename habit:', h.label);
+                        if (newName) onSaveRename('habit', h.id, newName);
+                        setActiveHabitPopover(null);
+                      }}
+                      className="text-[9px] text-neutral-400 hover:text-white uppercase font-bold text-left pt-1 border-t border-white/5"
+                    >
+                      Click to rename
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
           <button
             onClick={onOpenHabitModal}
             title="Add Habit Lane"
-            className="ml-1 p-1 hover:bg-white/10 rounded text-neutral-500 hover:text-white transition-colors cursor-pointer"
+            className="p-1 hover:bg-white/10 rounded text-neutral-500 hover:text-white transition-colors cursor-pointer"
           >
             <Plus size={12} />
           </button>
         </div>
 
+        {/* Date Spacer */}
         <div className="w-28 border-r border-white/5 flex items-center justify-center shrink-0">
           <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">DATE</span>
         </div>
 
+        {/* FIX 3: Task Column Headers (Stacked: Title + Icons on Row 1, Centered Streak on Row 2) */}
         <div className="flex-1 relative overflow-hidden min-w-max">
           {tasks.map((task, idx) => (
             <div
-              key={task.id}
+              key={`${task.id}-${idx}`}
               style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
-              className={`absolute h-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
+              className={`absolute h-full flex flex-col items-center justify-center transition-colors ${
                 selectedTaskId === task.id ? 'text-white' : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              <input
-                type="color"
-                value={task.hex}
-                onChange={(e) => onColorChange(task.id, e.target.value)}
-                className="w-3 h-3 rounded-full cursor-pointer bg-transparent border-none outline-none mr-0.5"
-                title="Click to tweak track color"
-              />
-
-              {editingItemId === task.id ? (
+              {/* Row 1: Color Dot, Title, History Clock */}
+              <div className="flex items-center gap-1.5 justify-center w-full px-2">
                 <input
-                  type="text"
-                  maxLength={16}
-                  value={editValue}
-                  autoFocus
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => onSaveRename('task', task.id)}
-                  onKeyDown={(e) => e.key === 'Enter' && onSaveRename('task', task.id)}
-                  className="w-24 bg-black border border-white/30 rounded px-1 text-[10px] text-center text-white outline-none"
+                  type="color"
+                  value={task.hex}
+                  onChange={(e) => onColorChange(task.id, e.target.value)}
+                  className="w-3 h-3 rounded-full cursor-pointer bg-transparent border-none outline-none shrink-0"
+                  title="Click to tweak track color"
                 />
-              ) : (
-                <span onDoubleClick={() => onStartRename(task.id, task.title)} title="Double click to rename">
-                  {task.title}
-                </span>
-              )}
 
-              <button
-                onClick={() => onOpenHistory(task)}
-                className="text-neutral-600 hover:text-neutral-300 transition-colors cursor-pointer"
-                title="View name evolution history"
-              >
-                <History size={11} />
-              </button>
+                {editingItemId === task.id ? (
+                  <input
+                    type="text"
+                    maxLength={16}
+                    value={editValue}
+                    autoFocus
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => onSaveRename('task', task.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && onSaveRename('task', task.id)}
+                    className="w-24 bg-black border border-white/30 rounded px-1 text-[10px] text-center text-white outline-none"
+                  />
+                ) : (
+                  <span 
+                    onDoubleClick={() => onStartRename(task.id, task.title)} 
+                    title="Double click to rename"
+                    className="text-[10px] font-black uppercase tracking-wider truncate max-w-[90px] cursor-pointer"
+                  >
+                    {task.title}
+                  </span>
+                )}
 
-              {task.streak > 0 && (
-                <span className="text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
-                  🔥{task.streak}
-                </span>
-              )}
+                <button
+                  onClick={() => onOpenHistory(task)}
+                  className="text-neutral-500 hover:text-neutral-200 transition-colors cursor-pointer shrink-0"
+                  title="View name evolution history"
+                >
+                  <History size={11} />
+                </button>
+              </div>
+
+              {/* Row 2: Centered Streak Counter */}
+              <div className="h-4 flex items-center justify-center">
+                {task.streak > 0 ? (
+                  <span className="text-[10px] text-amber-500 font-bold drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
+                    🔥 {task.streak}
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-neutral-600 tracking-wider font-mono">0d</span>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -152,7 +212,7 @@ export function TimelineStream({
             const laneX = (habitRailWidth / (habits.length + 1)) * (hIdx + 1);
 
             return (
-              <div key={habit.id} className="absolute inset-y-0" style={{ left: `${laneX - 8}px`, width: '16px' }}>
+              <div key={`${habit.id}-${hIdx}`} className="absolute inset-y-0" style={{ left: `${laneX - 8}px`, width: '16px' }}>
                 <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-white/5 rounded-full" />
 
                 {blocks.map((b, bIdx) => {
@@ -227,9 +287,8 @@ export function TimelineStream({
           ))}
         </div>
 
-        {/* Main Continuous Canvas */}
+        {/* Main Canvas */}
         <div className="flex-1 relative min-w-max" style={{ height: `${totalStreamHeight}px` }}>
-          {/* Static Wires */}
           <div className="absolute inset-0 pointer-events-none z-0">
             {TIMELINE_DAYS.map((d) => (
               <div 
@@ -252,7 +311,6 @@ export function TimelineStream({
             ))}
           </div>
 
-          {/* Dynamic Fluid Layer */}
           <div className="absolute inset-0 z-20">
             {tasks.map((task, idx) => {
               const isSelected = selectedTaskId === task.id;
@@ -260,7 +318,7 @@ export function TimelineStream({
 
               return (
                 <div
-                  key={task.id}
+                  key={`${task.id}-${idx}`}
                   style={{ left: `${getColLeft(idx)}px`, width: `${COLUMN_WIDTH}px` }}
                   className={`absolute h-full flex justify-center cursor-pointer transition-colors ${
                     isSelected ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'

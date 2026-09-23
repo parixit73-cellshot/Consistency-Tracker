@@ -1,9 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ROW_HEIGHT,
   CANVAS_PAD_Y,
   BASE_CURRENT_DAY_INDEX,
   TIMELINE_DAYS,
+  generateSafeId,
+  sanitizeTask,
+  sanitizeHabit,
   loadPersistedTasks,
   loadPersistedHabits,
   loadPersistedRevisions,
@@ -12,6 +15,7 @@ import {
   shiftCurrentDay,
   toggleHabitToday,
   renameTask,
+  renameHabit,
   updateTaskColor,
   insertNewTask,
   insertNewHabit,
@@ -29,7 +33,6 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [currentDay, setCurrentDay] = useState(BASE_CURRENT_DAY_INDEX);
 
-  // Modals & Panels State
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: '', hex: '#34d399', position: 1 });
 
@@ -40,15 +43,12 @@ export default function App() {
   const [historyModalTask, setHistoryModalTask] = useState(null);
   const [revisionsModalOpen, setRevisionsModalOpen] = useState(false);
 
-  // Selective Import State
   const [importFilePayload, setImportFilePayload] = useState(null);
   const [selectedImportTaskIds, setSelectedImportTaskIds] = useState(new Set());
 
-  // Hard Purge State
   const [purgeConfirmId, setPurgeConfirmId] = useState(null);
   const [purgeInputText, setPurgeInputText] = useState('');
 
-  // Inline Editing
   const [editingItemId, setEditingItemId] = useState(null);
   const [editValue, setEditValue] = useState('');
 
@@ -57,7 +57,7 @@ export default function App() {
 
   const snapshotState = (reason = 'Manual Change') => {
     const snap = {
-      id: `rev-${Date.now()}`,
+      id: generateSafeId('rev'),
       at: new Date().toLocaleTimeString(),
       reason,
       tasks: JSON.parse(JSON.stringify(tasks)),
@@ -87,7 +87,6 @@ export default function App() {
   const activeTasks = tasks.filter((t) => !t.isArchived);
   const archivedTasks = tasks.filter((t) => t.isArchived);
 
-  // --- ACTIONS ---
   const handleCreateTask = (e) => {
     e.preventDefault();
     if (!taskForm.title.trim()) return;
@@ -116,11 +115,11 @@ export default function App() {
     setHabitModalOpen(false);
   };
 
-  const handleArchiveTask = (taskId) => {
+  const handleArchiveTask = useCallback((taskId) => {
     snapshotState('Archive Task');
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, isArchived: true } : t)));
-    if (selectedTaskId === taskId) setSelectedTaskId(null);
-  };
+    setSelectedTaskId((prev) => (prev === taskId ? null : prev));
+  }, [tasks]);
 
   const handleRestoreTask = (taskId) => {
     snapshotState('Respawn Task from Vault');
@@ -144,8 +143,10 @@ export default function App() {
       try {
         const parsed = JSON.parse(ev.target.result);
         if (parsed.tasks && Array.isArray(parsed.tasks)) {
-          setImportFilePayload(parsed);
-          setSelectedImportTaskIds(new Set(parsed.tasks.map((t) => t.id)));
+          // Sanitize every incoming task to protect against white screens
+          const cleanTasks = parsed.tasks.map(sanitizeTask);
+          setImportFilePayload({ ...parsed, tasks: cleanTasks });
+          setSelectedImportTaskIds(new Set(cleanTasks.map((t) => t.id)));
         }
       } catch (err) {
         console.error('Invalid backup JSON', err);
@@ -163,7 +164,7 @@ export default function App() {
       .filter((t) => selectedImportTaskIds.has(t.id))
       .map((t) => ({
         ...t,
-        id: `imp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: generateSafeId('imp'),
         isArchived: destination === 'vault',
       }));
 
@@ -174,6 +175,40 @@ export default function App() {
   const selectedTask = activeTasks.find((t) => t.id === selectedTaskId);
   const todayStatus = selectedTask ? selectedTask.matrix[currentDay] : 0;
   const currentDayInfo = TIMELINE_DAYS[currentDay];
+
+  // Keyboard Shortcuts Listener
+  useEffect(() => {
+    function handleKeyDown(e) {
+      const tagName = document.activeElement?.tagName;
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA') return;
+
+      if (!selectedTaskId) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'UNDO', currentDay));
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (todayStatus === 2) {
+          setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'STOP', currentDay));
+        } else if (todayStatus === 0) {
+          setTasks((prev) => executeMatrixAction(prev, selectedTaskId, 'START', currentDay));
+        }
+        return;
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleArchiveTask(selectedTaskId);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedTaskId, todayStatus, currentDay, handleArchiveTask]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#070707] text-white font-mono select-none overflow-hidden relative">
@@ -237,9 +272,12 @@ export default function App() {
         }}
         onSaveRename={(type, id) => {
           if (type === 'task') setTasks((prev) => renameTask(prev, id, editValue));
-          else setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, label: (editValue.trim() || h.label).substring(0, 5).toUpperCase() } : h)));
           setEditingItemId(null);
         }}
+        onRenameHabit={(id, newLabel) => setTasks((prev) => {
+          setHabits((prevH) => renameHabit(prevH, id, newLabel));
+          return prev;
+        })}
         onOpenHistory={setHistoryModalTask}
       />
 
@@ -297,8 +335,8 @@ export default function App() {
         revisions={revisions}
         onRollback={(rev) => {
           snapshotState('Rollback to Snapshot');
-          setTasks(rev.tasks);
-          setHabits(rev.habits);
+          setTasks(rev.tasks.map(sanitizeTask));
+          setHabits(rev.habits.map(sanitizeHabit));
           setRevisionsModalOpen(false);
         }}
       />
