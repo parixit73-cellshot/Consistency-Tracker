@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "task-tracker",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.parixit.consistency-tracker",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:3000",
