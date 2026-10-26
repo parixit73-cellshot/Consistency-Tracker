@@ -32,7 +32,6 @@ import {
 
 // ============================================================================
 // LAYER 1: PURE DOMAIN MODEL, STRICT VALIDATION & TIME ENGINE
-// (Zero silent fallbacks: corrupt payloads throw explicit errors)
 // ============================================================================
 
 const BASE_ROW_HEIGHT = 64;
@@ -49,7 +48,7 @@ const STORAGE_TASKS_KEY = 'flow_tracker_tasks_prod';
 const STORAGE_HABITS_KEY = 'flow_tracker_habits_prod';
 const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_prod';
 
-export function formatISODate(date) {
+function formatISODate(date) {
   if (!(date instanceof Date) || isNaN(date.getTime())) {
     throw new Error('Invalid Date object passed to formatISODate');
   }
@@ -59,7 +58,7 @@ export function formatISODate(date) {
   return `${y}-${m}-${d}`;
 }
 
-export function parseISODateLocal(isoStr) {
+function parseISODateLocal(isoStr) {
   if (typeof isoStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoStr)) {
     throw new Error(`Invalid ISO date string: "${isoStr}"`);
   }
@@ -67,7 +66,7 @@ export function parseISODateLocal(isoStr) {
   return new Date(y, m - 1, d);
 }
 
-export function getWeekNumber(d) {
+function getWeekNumber(d) {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 4 - dayNum);
@@ -75,15 +74,14 @@ export function getWeekNumber(d) {
   return Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
 }
 
-export function generateSafeId(prefix = 'id') {
+function generateSafeId(prefix = 'id') {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `${prefix}-${crypto.randomUUID()}`;
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Strict Validator & Sanitizer — Fails loudly on corrupt objects
-export function validateAndNormalizeTask(t) {
+function validateAndNormalizeTask(t) {
   if (!t || typeof t !== 'object') {
     throw new Error('Corrupt Task Record: Expected an object.');
   }
@@ -110,7 +108,7 @@ export function validateAndNormalizeTask(t) {
   };
 }
 
-export function validateAndNormalizeHabit(h) {
+function validateAndNormalizeHabit(h) {
   if (!h || typeof h !== 'object') {
     throw new Error('Corrupt Habit Record: Expected an object.');
   }
@@ -128,6 +126,7 @@ export function validateAndNormalizeHabit(h) {
     id: h.id,
     label: h.label.trim().substring(0, 16).toUpperCase(),
     hex: typeof h.hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(h.hex) ? h.hex : '#22d3ee',
+    isArchived: Boolean(h.isArchived),
     nameHistory: Array.isArray(h.nameHistory)
       ? h.nameHistory
       : [{ title: h.label.trim().toUpperCase(), at: formatISODate(new Date()) }],
@@ -135,7 +134,7 @@ export function validateAndNormalizeHabit(h) {
   };
 }
 
-export function loadPersistedTasks() {
+function loadPersistedTasks() {
   const saved = localStorage.getItem(STORAGE_TASKS_KEY);
   if (!saved) return [];
   const parsed = JSON.parse(saved);
@@ -145,7 +144,7 @@ export function loadPersistedTasks() {
   return parsed.map(validateAndNormalizeTask);
 }
 
-export function loadPersistedHabits() {
+function loadPersistedHabits() {
   const saved = localStorage.getItem(STORAGE_HABITS_KEY);
   if (!saved) return [];
   const parsed = JSON.parse(saved);
@@ -155,7 +154,7 @@ export function loadPersistedHabits() {
   return parsed.map(validateAndNormalizeHabit);
 }
 
-export function loadPersistedRevisions() {
+function loadPersistedRevisions() {
   const saved = localStorage.getItem(STORAGE_REVISIONS_KEY);
   if (!saved) return [];
   const parsed = JSON.parse(saved);
@@ -165,7 +164,7 @@ export function loadPersistedRevisions() {
   return parsed;
 }
 
-export function persistState(tasks, habits, revisions = []) {
+function persistState(tasks, habits, revisions = []) {
   localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(tasks));
   localStorage.setItem(STORAGE_HABITS_KEY, JSON.stringify(habits));
   if (revisions.length > 0) {
@@ -173,7 +172,7 @@ export function persistState(tasks, habits, revisions = []) {
   }
 }
 
-export function generateTimelineDays(centerDate = new Date(), tasks = [], habits = []) {
+function generateTimelineDays(centerDate = new Date(), tasks = [], habits = []) {
   let earliestTime = new Date(centerDate).getTime() - 90 * 86400000;
 
   const scanDates = (dateMap) => {
@@ -225,10 +224,9 @@ export function generateTimelineDays(centerDate = new Date(), tasks = [], habits
 
 // ============================================================================
 // LAYER 2: PURE GEOMETRY & STREAK ENGINE
-// (Accepts state + zoom + rail widths -> Outputs exact pixel bounding boxes)
 // ============================================================================
 
-export function getCalendarWeekDiff(isoA, isoB) {
+function getCalendarWeekDiff(isoA, isoB) {
   const lastActiveDate = parseISODateLocal(isoA);
   const nextActiveDate = parseISODateLocal(isoB);
 
@@ -243,7 +241,7 @@ export function getCalendarWeekDiff(isoA, isoB) {
   return Math.round((nextSunday.getTime() - lastSunday.getTime()) / (7 * 86400000));
 }
 
-export function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
+function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
   const blocks = [];
   let blockStart = null;
   let blockDays = [];
@@ -313,7 +311,6 @@ export function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
     }
   }
 
-  // Calculate active streak connected up to current/previous calendar week
   let currentStreak = 0;
   if (blocks.length > 0) {
     const lastBlock = blocks[blocks.length - 1];
@@ -335,7 +332,7 @@ export function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
   return { blocks, cords, currentStreak };
 }
 
-export function parseHabitBlocks(habitData, timelineDays) {
+function parseHabitBlocks(habitData, timelineDays) {
   const blocks = [];
   let start = null;
   let len = 0;
@@ -361,20 +358,21 @@ export function parseHabitBlocks(habitData, timelineDays) {
   return blocks;
 }
 
-export function computeBoardGeometry({
-  activeTasks,
+function computeBoardGeometry({
+  activeTasks = [],
   habits,
-  timelineDays,
+  activeHabits,
+  timelineDays = [],
   todayIso,
-  zoom,
+  zoom = 1.0,
 }) {
+  const habitItems = activeHabits || habits || [];
   const rowHeight = Math.round(BASE_ROW_HEIGHT * zoom);
   const colWidth = Math.round(BASE_COL_WIDTH * zoom);
   const colGap = Math.round(BASE_COL_GAP * zoom);
   const canvasPadX = Math.round(BASE_CANVAS_PAD_X * zoom);
   const canvasPadY = Math.round(BASE_CANVAS_PAD_Y * zoom);
 
-  // Strict vertical capsule width (32px to 40px) centered in lane
   const pillWidth = Math.max(32, Math.min(40, Math.round(BASE_PILL_WIDTH * zoom)));
   const habitStep = Math.max(30, Math.round(36 * zoom));
 
@@ -384,7 +382,6 @@ export function computeBoardGeometry({
     canvasPadX * 2 + activeTasks.length * (colWidth + colGap) + 120
   );
 
-  // Pre-compute row Y & center Y coordinates
   const rows = timelineDays.map((d, idx) => {
     const top = canvasPadY + idx * rowHeight;
     const centerY = top + rowHeight / 2;
@@ -396,10 +393,9 @@ export function computeBoardGeometry({
     };
   });
 
-  // Pre-compute habit lanes
-  const habitLanes = habits.map((h, idx) => {
+  const habitLanes = habitItems.map((h, idx) => {
     const centerX = 24 + idx * habitStep;
-    const rawBlocks = parseHabitBlocks(h.data, timelineDays);
+    const rawBlocks = parseHabitBlocks(h.data || {}, timelineDays);
     const pillSegments = rawBlocks.map((b) => {
       const firstRow = rows[b.startIdx];
       const lastRow = rows[b.startIdx + b.daysCount - 1];
@@ -420,7 +416,6 @@ export function computeBoardGeometry({
     };
   });
 
-  // Pre-compute task columns, centered vertical capsules, and SVG center-line cords
   const taskColumns = [];
   const allSvgCords = [];
 
@@ -616,6 +611,7 @@ function insertNewHabitRecord(habits, { label, hex, position }) {
     id: generateSafeId('habit'),
     label: cleanLabel,
     hex: hex || '#22d3ee',
+    isArchived: false,
     nameHistory: [{ title: cleanLabel, at: formatISODate(new Date()) }],
     data: {},
   };
@@ -649,7 +645,7 @@ function moveTaskOrder(tasks, taskId, direction) {
 }
 
 // ============================================================================
-// MAIN APPLICATION COMPONENT (LAYERED ARCHITECTURE)
+// MAIN APPLICATION COMPONENT
 // ============================================================================
 
 export default function App() {
@@ -658,12 +654,10 @@ export default function App() {
   const [revisions, setRevisions] = useState(loadPersistedRevisions);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
 
-  // Viewport & Layered Geometry State
   const [zoom, setZoom] = useState(1.0);
   const [habitRailWidth, setHabitRailWidth] = useState(160);
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
 
-  // Real-time clock & Midnight Turnover Poll (60s)
   const [now, setNow] = useState(() => new Date());
   const todayIso = useMemo(() => formatISODate(now), [now]);
 
@@ -674,7 +668,6 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Auto-rollover unfinished deep work (state 2) from past days into completed (1) and active today (2)
   useEffect(() => {
     setTasks((prevTasks) => {
       let modified = false;
@@ -698,7 +691,6 @@ export default function App() {
     });
   }, [todayIso]);
 
-  // Dynamic 90-day past snapped to Sunday + 14-day future horizon
   const timelineDays = useMemo(
     () => generateTimelineDays(now, tasks, habits),
     [now, tasks, habits]
@@ -712,26 +704,26 @@ export default function App() {
   const activeTasks = useMemo(() => tasks.filter((t) => !t.isArchived), [tasks]);
   const archivedTasks = useMemo(() => tasks.filter((t) => t.isArchived), [tasks]);
 
-  // Compute Layered Geometry
+  const activeHabits = useMemo(() => habits.filter((h) => !h.isArchived), [habits]);
+  const archivedHabits = useMemo(() => habits.filter((h) => h.isArchived), [habits]);
+
   const geometry = useMemo(
     () =>
       computeBoardGeometry({
         activeTasks,
-        habits,
+        activeHabits,
         timelineDays,
         todayIso,
         zoom,
       }),
-    [activeTasks, habits, timelineDays, todayIso, zoom]
+    [activeTasks, activeHabits, timelineDays, todayIso, zoom]
   );
 
-  // Ensure habitRailWidth accommodates habits or user drag
   const effectiveHabitRailWidth = useMemo(() => {
-    const minRequiredByTracks = Math.max(120, habits.length * geometry.habitStep + 56);
+    const minRequiredByTracks = Math.max(120, activeHabits.length * geometry.habitStep + 56);
     return Math.max(120, Math.min(360, Math.max(habitRailWidth, minRequiredByTracks)));
-  }, [habitRailWidth, habits.length, geometry.habitStep]);
+  }, [habitRailWidth, activeHabits.length, geometry.habitStep]);
 
-  // Modals & Drawers State
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: '', hex: '#34d399', position: 1 });
 
@@ -756,13 +748,11 @@ export default function App() {
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editingTaskTitle, setEditingTaskTitle] = useState('');
 
-  // Refs for Scroll Sync & Resizable Rail
   const scrollContainerRef = useRef(null);
   const headerTaskScrollRef = useRef(null);
   const fileInputRef = useRef(null);
   const isResizingRailRef = useRef(false);
 
-  // Persist to LocalStorage
   useEffect(() => {
     persistState(tasks, habits, revisions);
   }, [tasks, habits, revisions]);
@@ -781,7 +771,6 @@ export default function App() {
     [tasks, habits]
   );
 
-  // True Focus Week Navigation: anchors the current sprint's Sunday cleanly in view
   const focusCurrentWeek = useCallback(
     (smooth = true) => {
       if (!scrollContainerRef.current) return;
@@ -803,7 +792,6 @@ export default function App() {
     focusCurrentWeek(false);
   }, [todayIndex]);
 
-  // Ctrl + MouseWheel Continuous Zoom (0.6x to 1.6x)
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -823,7 +811,6 @@ export default function App() {
     return () => el.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Horizontal Resizable Divider Mouse Handler
   const handleStartRailResize = useCallback(
     (e) => {
       e.preventDefault();
@@ -850,14 +837,12 @@ export default function App() {
     [effectiveHabitRailWidth]
   );
 
-  // Synchronize Horizontal Scroll between Task Canvas and Task Headers
   const handleStreamScroll = (e) => {
     if (headerTaskScrollRef.current) {
       headerTaskScrollRef.current.scrollLeft = e.target.scrollLeft;
     }
   };
 
-  // Native File Export (Save As Dialog via showSaveFilePicker or direct Blob download)
   const handleExportBackup = async () => {
     const suggestedName = `consistency_tracker_backup_${todayIso}.json`;
     const jsonPayload = JSON.stringify({ tasks, habits, exportedAt: new Date().toISOString() }, null, 2);
@@ -888,7 +873,6 @@ export default function App() {
     }
   };
 
-  // Strict File Import (Fails loudly if JSON or schema is invalid)
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -923,10 +907,34 @@ export default function App() {
       }));
 
     setTasks((prev) => [...prev, ...tasksToBringIn]);
+
+    if (Array.isArray(importFilePayload.habits) && importFilePayload.habits.length > 0) {
+      setHabits((prevHabits) => {
+        const next = [...prevHabits];
+        importFilePayload.habits.forEach((impH) => {
+          const matchIdx = next.findIndex(
+            (h) => h.label.toUpperCase() === impH.label.toUpperCase()
+          );
+          if (matchIdx !== -1) {
+            next[matchIdx] = {
+              ...next[matchIdx],
+              data: { ...next[matchIdx].data, ...impH.data },
+            };
+          } else {
+            next.push({
+              ...impH,
+              id: generateSafeId('habit'),
+              isArchived: destination === 'vault',
+            });
+          }
+        });
+        return next;
+      });
+    }
+
     setImportFilePayload(null);
   };
 
-  // Task & Habit CRUD Handlers
   const handleCreateTask = (e) => {
     e.preventDefault();
     if (!taskForm.title.trim()) return;
@@ -978,7 +986,6 @@ export default function App() {
     setPurgeInputText('');
   };
 
-  // Sprint Notes Handlers
   const handleAddSprintLog = (taskId, sprintKey, text) => {
     if (!text || !text.trim()) return;
     setTasks((prev) =>
@@ -1059,7 +1066,6 @@ export default function App() {
     isSunday: false,
   };
 
-  // Keyboard Shortcuts (Enter = Start/Stop, Del = Archive, Ctrl+Z = Undo)
   useEffect(() => {
     function handleKeyDown(e) {
       const tagName = document.activeElement?.tagName;
@@ -1105,9 +1111,7 @@ export default function App() {
         className="hidden"
       />
 
-      {/* ====================================================================
-          LAYER 4A: TOP NAVIGATION & CONTROLS BAR
-         ==================================================================== */}
+      {/* TOP NAVIGATION & CONTROLS BAR */}
       <header className="h-14 border-b border-white/10 bg-[#0a0a0a] flex items-center px-6 shrink-0 z-40 justify-between">
         <div className="flex items-center gap-5">
           <span className="text-[11px] font-black tracking-[0.2em] uppercase text-neutral-400">
@@ -1124,7 +1128,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          {/* Unlock History (Past-Day Backfill Toggle) */}
           <button
             onClick={() => setHistoryUnlocked((prev) => !prev)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
@@ -1138,7 +1141,6 @@ export default function App() {
             <span>{historyUnlocked ? 'History Unlocked' : 'Unlock History'}</span>
           </button>
 
-          {/* Zoom Controls */}
           <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full px-2 py-1">
             <button
               onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
@@ -1163,7 +1165,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Focus Week */}
           <button
             onClick={() => focusCurrentWeek(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
@@ -1173,7 +1174,6 @@ export default function App() {
             <span>Focus Week</span>
           </button>
 
-          {/* Backup, Import, Revisions, Vault */}
           <div className="flex items-center gap-1 border-l border-white/10 pl-2.5">
             <button
               onClick={handleExportBackup}
@@ -1208,7 +1208,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Spawn Task */}
           <button
             onClick={() => {
               setTaskForm({ title: '', hex: '#34d399', position: activeTasks.length + 1 });
@@ -1222,11 +1221,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* ====================================================================
-          STICKY SUB-HEADER: HABIT BADGES + RESIZE HANDLE + DATE + TASK CARDS
-         ==================================================================== */}
+      {/* STICKY SUB-HEADER: HABIT BADGES + RESIZE HANDLE + DATE + TASK CARDS */}
       <div className="h-14 border-b border-white/10 bg-[#0a0a0a] flex shrink-0 z-30 relative">
-        {/* Pinned Left: Habit Rail Header with Pegged '+' Button */}
         <div
           style={{ width: `${effectiveHabitRailWidth}px` }}
           className="border-r border-white/10 relative shrink-0 z-20 bg-[#0a0a0a] flex items-center"
@@ -1266,17 +1262,16 @@ export default function App() {
             );
           })}
 
-          {/* Dynamically Pegged '+' Button */}
           <button
             onClick={() => {
-              setHabitForm({ label: '', hex: '#22d3ee', position: habits.length + 1 });
+              setHabitForm({ label: '', hex: '#22d3ee', position: activeHabits.length + 1 });
               setHabitModalOpen(true);
             }}
             title="Add Habit Track"
             style={{
               left: `${
-                habits.length > 0
-                  ? 24 + habits.length * geometry.habitStep + 4
+                activeHabits.length > 0
+                  ? 24 + activeHabits.length * geometry.habitStep + 4
                   : 24
               }px`,
             }}
@@ -1285,7 +1280,6 @@ export default function App() {
             <Plus size={12} />
           </button>
 
-          {/* Resizable Divider Handle in Header */}
           <div
             onMouseDown={handleStartRailResize}
             title="Drag to resize Habit Rail"
@@ -1295,7 +1289,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Pinned Left: Date Column Header */}
         <div
           style={{ width: `${DATE_COL_WIDTH}px` }}
           className="border-r border-white/10 flex items-center justify-center shrink-0 z-20 bg-[#0a0a0a]"
@@ -1305,7 +1298,6 @@ export default function App() {
           </span>
         </div>
 
-        {/* Layer 4B: Horizontally Synced Task Column Headers */}
         <div ref={headerTaskScrollRef} className="flex-1 overflow-hidden relative no-scrollbar">
           <div
             style={{ width: `${geometry.taskCanvasWidth}px`, height: '100%' }}
@@ -1323,7 +1315,6 @@ export default function App() {
                   }`}
                 >
                   <div className="flex items-center gap-1 justify-center w-full">
-                    {/* Hover-Revealed Move Left */}
                     <button
                       disabled={idx === 0}
                       onClick={(e) => {
@@ -1341,7 +1332,6 @@ export default function App() {
                       <ChevronLeft size={11} />
                     </button>
 
-                    {/* Single Swatch Dot */}
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{
@@ -1350,7 +1340,6 @@ export default function App() {
                       }}
                     />
 
-                    {/* Truncated Title / Inline Rename */}
                     {editingTaskId === task.id ? (
                       <input
                         type="text"
@@ -1385,7 +1374,6 @@ export default function App() {
                       </span>
                     )}
 
-                    {/* Hover-Revealed Move Right */}
                     <button
                       disabled={idx === activeTasks.length - 1}
                       onClick={(e) => {
@@ -1404,7 +1392,6 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* Sub-row: Streak Fire Counter + Quick Triggers */}
                   <div className="flex items-center gap-2 mt-0.5">
                     {currentStreak > 0 ? (
                       <span className="text-[10px] text-amber-400 font-bold">
@@ -1444,15 +1431,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* ====================================================================
-          UNIFIED LAYERED SCROLL VIEWPORT
-         ==================================================================== */}
+      {/* UNIFIED LAYERED SCROLL VIEWPORT */}
       <div
         ref={scrollContainerRef}
         onScroll={handleStreamScroll}
         className="flex-1 overflow-y-auto overflow-x-auto flex relative bg-[#050505] no-scrollbar select-none"
       >
-        {/* LAYER 1: PINNED HABIT RAILS + DRAGGABLE RESIZE DIVIDER */}
+        {/* LAYER 1: PINNED HABIT RAILS */}
         <div
           style={{
             width: `${effectiveHabitRailWidth}px`,
@@ -1466,10 +1451,8 @@ export default function App() {
               className="absolute inset-y-0"
               style={{ left: `${centerX - 8}px`, width: '16px' }}
             >
-              {/* Subtle vertical guide track */}
               <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-white/[0.04] rounded-full" />
 
-              {/* Connected Vertical Neon Bars */}
               {pillSegments.map((seg, sIdx) => (
                 <div
                   key={sIdx}
@@ -1483,7 +1466,6 @@ export default function App() {
                 />
               ))}
 
-              {/* Interactive Day Cells (Today or History Unlocked) */}
               {geometry.rows.map((r) => {
                 const isToday = r.isoDate === todayIso;
                 const isPastOrToday = r.isoDate <= todayIso;
@@ -1517,7 +1499,6 @@ export default function App() {
             </div>
           ))}
 
-          {/* Full-Height Draggable Vertical Resize Handle */}
           <div
             onMouseDown={handleStartRailResize}
             className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-amber-400/40 transition-colors z-30"
@@ -1586,7 +1567,7 @@ export default function App() {
             height: `${geometry.totalStreamHeight}px`,
           }}
         >
-          {/* LAYER 0B: BASE HORIZONTAL GRID LINES */}
+          {/* BASE HORIZONTAL GRID LINES */}
           <div className="absolute inset-0 pointer-events-none z-0">
             {geometry.rows.map((r) => {
               const isToday = r.isoDate === todayIso;
@@ -1606,7 +1587,7 @@ export default function App() {
             })}
           </div>
 
-          {/* LAYER 2: DEDICATED SVG UMBILICAL CORDS */}
+          {/* DEDICATED SVG UMBILICAL CORDS */}
           <svg
             width={geometry.taskCanvasWidth}
             height={geometry.totalStreamHeight}
@@ -1627,9 +1608,9 @@ export default function App() {
             ))}
           </svg>
 
-          {/* LAYER 3: TASK COLUMN LANES, PAST-DAY BACKFILL CELLS & CAPSULE PILLS */}
+          {/* TASK COLUMN LANES & PILLS */}
           <div className="absolute inset-0 z-20">
-            {geometry.taskColumns.map(({ task, left, width, blocks }) => {
+            {geometry.taskColumns.map(({ task, left, width }) => {
               const isSelected = selectedTaskId === task.id;
 
               return (
@@ -1641,10 +1622,8 @@ export default function App() {
                     isSelected ? 'bg-white/[0.035]' : 'hover:bg-white/[0.015]'
                   }`}
                 >
-                  {/* Center Axis Guide Line */}
                   <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[1px] bg-white/[0.05] pointer-events-none" />
 
-                  {/* Interactive Past-Day Backfill Targets (Active when History Unlocked) */}
                   {historyUnlocked &&
                     geometry.rows.map((r) => {
                       const isPast = r.isoDate < todayIso;
@@ -1680,7 +1659,6 @@ export default function App() {
               );
             })}
 
-            {/* Strictly Centered Vertical Capsule Pills */}
             {geometry.taskColumns.map(({ task, blocks }) =>
               blocks.map((blk) => (
                 <div
@@ -1719,9 +1697,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* ====================================================================
-          LAYER 4C: BOTTOM ACTION DOCK
-         ==================================================================== */}
+      {/* BOTTOM ACTION DOCK */}
       <footer className="h-16 border-t border-white/10 bg-[#0a0a0a] flex items-center justify-between px-8 shrink-0 z-40">
         <div className="flex items-center gap-4">
           <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
@@ -1733,7 +1709,6 @@ export default function App() {
 
           {selectedTask && (
             <div className="flex items-center gap-2.5 ml-3">
-              {/* Single Circular Color Button Opening Centered Popover */}
               <button
                 onClick={() => setDockColorPickerOpen(true)}
                 style={{
@@ -1744,7 +1719,6 @@ export default function App() {
                 title="Change Channel Color"
               />
 
-              {/* Open Sprint Notes Button */}
               <button
                 onClick={() => setNotesDrawerTaskId(selectedTask.id)}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-200 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
@@ -1753,7 +1727,6 @@ export default function App() {
                 <span>Sprint Notes</span>
               </button>
 
-              {/* Archive Button */}
               <button
                 onClick={() => handleArchiveTask(selectedTask.id)}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
@@ -1817,11 +1790,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ====================================================================
-          LAYER 5: POPOUTS, SLIDE-OUT DRAWERS & MODALS
-         ==================================================================== */}
-
-      {/* 5A: HABIT POPOUT CARD (Full Name Editor, Stats & Delete) */}
+      {/* 5A: HABIT POPOUT CARD */}
       {activeHabitForPopout && (
         <div
           onClick={() => setActiveHabitPopoutId(null)}
@@ -1910,6 +1879,23 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
+                  snapshotState(`Archive Habit: ${activeHabitForPopout.label}`);
+                  setHabits((prev) =>
+                    prev.map((h) =>
+                      h.id === activeHabitForPopout.id ? { ...h, isArchived: true } : h
+                    )
+                  );
+                  setActiveHabitPopoutId(null);
+                }}
+                className="flex items-center gap-1 px-3 py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+              >
+                <Archive size={12} />
+                <span>Archive</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
                   snapshotState(`Delete Habit: ${activeHabitForPopout.label}`);
                   setHabits((prev) => prev.filter((h) => h.id !== activeHabitForPopout.id));
                   setActiveHabitPopoutId(null);
@@ -1935,14 +1921,14 @@ export default function App() {
                 }}
                 className="flex-1 py-2 rounded-lg bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider cursor-pointer"
               >
-                Save Changes
+                Save
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 5B: CENTERED DOCK COLOR PICKER POPOVER */}
+      {/* 5B: DOCK COLOR PICKER */}
       {dockColorPickerOpen && selectedTask && (
         <div
           onClick={() => setDockColorPickerOpen(false)}
@@ -1991,7 +1977,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 5C: SPRINT-LINKED NOTES DRAWER (Right Slide-Out Panel) */}
+      {/* 5C: SPRINT NOTES DRAWER */}
       {notesDrawerTask && (
         <SprintNotesDrawer
           task={notesDrawerTask}
@@ -2005,7 +1991,7 @@ export default function App() {
         />
       )}
 
-      {/* 5D: CREATE TASK MODAL */}
+      {/* 5D: TASK MODAL */}
       {taskModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
@@ -2089,7 +2075,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 5E: CREATE HABIT MODAL */}
+      {/* 5E: HABIT MODAL */}
       {habitModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
@@ -2143,12 +2129,12 @@ export default function App() {
 
               <div>
                 <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
-                  Position Slot (1 to {habits.length + 1})
+                  Position Slot (1 to {activeHabits.length + 1})
                 </label>
                 <input
                   type="number"
                   min={1}
-                  max={habits.length + 1}
+                  max={activeHabits.length + 1}
                   value={habitForm.position}
                   onChange={(e) => setHabitForm({ ...habitForm, position: e.target.value })}
                   className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
@@ -2226,7 +2212,7 @@ export default function App() {
                   Inspect & Restore Tracks
                 </span>
                 <span className="text-[10px] text-neutral-400">
-                  Select specific tasks to extract from this backup:
+                  Select specific tasks to extract ({importFilePayload.habits?.length || 0} habits will merge automatically):
                 </span>
               </div>
               <button
@@ -2236,6 +2222,21 @@ export default function App() {
                 <X size={16} />
               </button>
             </div>
+
+            {importFilePayload.habits?.length > 0 && (
+              <div className="flex items-center gap-1.5 p-2 rounded-lg bg-white/5 border border-white/10 overflow-x-auto text-[10px] font-mono">
+                <span className="text-neutral-400 uppercase text-[9px] font-bold">Habits in Backup:</span>
+                {importFilePayload.habits.map((h, i) => (
+                  <span
+                    key={i}
+                    className="px-2 py-0.5 rounded-full font-bold uppercase"
+                    style={{ backgroundColor: `${h.hex}25`, color: h.hex, border: `1px solid ${h.hex}60` }}
+                  >
+                    {h.label} ({Object.keys(h.data || {}).length}d)
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
               {importFilePayload.tasks.map((t, idx) => {
@@ -2290,7 +2291,7 @@ export default function App() {
                     : 'bg-white text-black hover:bg-neutral-200 cursor-pointer'
                 }`}
               >
-                Restore Selected to Timeline ({selectedImportTaskIds.size})
+                Restore Selected Tasks + Habits ({selectedImportTaskIds.size})
               </button>
 
               <button
@@ -2302,7 +2303,7 @@ export default function App() {
                     : 'border-amber-400/40 text-amber-400 hover:bg-amber-400/10 cursor-pointer'
                 }`}
               >
-                Send Selected Straight to Vault
+                Send Tasks to Vault + Merge Habits
               </button>
             </div>
           </div>
@@ -2371,7 +2372,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 5I: ARCHIVE VAULT DRAWER (Soft-Delete & Typed DELETE Purge) */}
+      {/* 5I: ARCHIVE VAULT DRAWER */}
       {vaultOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end">
           <div className="w-full max-w-md bg-[#0a0a0a] border-l border-white/10 h-full p-6 flex flex-col justify-between shadow-2xl">
@@ -2391,9 +2392,13 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="mt-6 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-180px)] pr-2">
+              <div className="mt-6 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-210px)] pr-2">
+                <div className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider font-bold">
+                  Archived Tasks ({archivedTasks.length})
+                </div>
+
                 {archivedTasks.length === 0 ? (
-                  <div className="text-center py-12 text-neutral-600 text-xs tracking-wider uppercase font-bold">
+                  <div className="text-center py-6 text-neutral-600 text-xs tracking-wider uppercase font-bold bg-[#101010] rounded-xl border border-white/5">
                     No archived tasks in the vault.
                   </div>
                 ) : (
@@ -2487,12 +2492,64 @@ export default function App() {
                     );
                   })
                 )}
+
+                {/* ARCHIVED HABITS */}
+                {archivedHabits && archivedHabits.length > 0 && (
+                  <div className="pt-4 border-t border-white/10 flex flex-col gap-3">
+                    <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider font-bold">
+                      Archived Habits ({archivedHabits.length})
+                    </span>
+                    {archivedHabits.map((h) => (
+                      <div
+                        key={h.id}
+                        className="bg-[#121212] border border-white/10 rounded-xl p-3 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: h.hex }}
+                          />
+                          <span className="text-xs font-bold uppercase text-white">{h.label}</span>
+                          <span className="text-[9px] text-neutral-500 font-mono">
+                            ({Object.keys(h.data || {}).length}d logged)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              snapshotState(`Respawn Habit: ${h.label}`);
+                              setHabits((prev) =>
+                                prev.map((item) =>
+                                  item.id === h.id ? { ...item, isArchived: false } : item
+                                )
+                              );
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-white text-black text-[9px] font-black uppercase cursor-pointer hover:bg-neutral-200"
+                          >
+                            <RefreshCw size={10} />
+                            <span>Respawn</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              snapshotState(`Purge Habit: ${h.label}`);
+                              setHabits((prev) => prev.filter((item) => item.id !== h.id));
+                            }}
+                            className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
+                            title="Permanently remove habit"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="pt-4 border-t border-white/10 text-[9px] text-neutral-500 leading-relaxed">
-              Vaulted tasks keep 100% of their historical days and sprint notes intact. Respawning
-              restores them to the active timeline without overwriting existing columns.
+              Vaulted tasks and habits keep 100% of their historical days intact. Respawning
+              restores them to the active timeline without overwriting existing lanes.
             </div>
           </div>
         </div>
@@ -2539,7 +2596,6 @@ function SprintNotesDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs select-none">
       <div className="w-full max-w-lg bg-[#070707] border-l border-white/10 h-full flex flex-col shadow-2xl">
-        {/* Drawer Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-[#0d0d0d]">
           <div className="flex items-center gap-2.5">
             <span
@@ -2569,7 +2625,6 @@ function SprintNotesDrawer({
           </button>
         </div>
 
-        {/* Sprint Cards Stream */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {sprintBlocks.length === 0 ? (
             <div className="text-center py-20 text-neutral-600 font-mono text-xs space-y-2">
@@ -2590,7 +2645,6 @@ function SprintNotesDrawer({
                   key={sprintKey}
                   className="w-full bg-[#0e0e0e] border border-white/10 hover:border-white/20 rounded-xl overflow-hidden shadow-lg transition"
                 >
-                  {/* Collapsible Sprint Banner */}
                   <div
                     onClick={() => toggleCollapse(sprintKey)}
                     className="px-4 py-3 bg-[#141414] border-b border-white/5 flex items-center justify-between cursor-pointer hover:bg-[#191919] transition"
@@ -2619,10 +2673,8 @@ function SprintNotesDrawer({
                     </span>
                   </div>
 
-                  {/* Card Body */}
                   {!isCollapsed && (
                     <div className="p-4 space-y-4">
-                      {/* Timestamped Log Entries */}
                       <div className="space-y-2.5">
                         {(sprintNotes.logs || []).map((log) => {
                           const dateObj = new Date(log.at);
@@ -2715,7 +2767,6 @@ function SprintNotesDrawer({
                         })}
                       </div>
 
-                      {/* New Note Input */}
                       <div className="space-y-2">
                         <textarea
                           value={activeDrafts[sprintKey] || ''}
@@ -2741,7 +2792,6 @@ function SprintNotesDrawer({
                         </div>
                       </div>
 
-                      {/* Pending / Next Up Field */}
                       <div className="pt-2 border-t border-white/5 space-y-1.5">
                         <span className="text-[9px] font-mono font-bold text-neutral-500 uppercase tracking-wider block">
                           Pending / Next Up:
