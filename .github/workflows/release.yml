@@ -1,10 +1,9 @@
-name: Release Desktop App
+name: Release Consistency Tracker
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
   release:
@@ -19,25 +18,38 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: 'npm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build React frontend
-        run: npm run build
-
-      - name: Build Tauri Desktop App
+      - name: Build Tauri Desktop (.exe / .msi)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v1.0.0
-          releaseName: 'Flow Tracker v1.0.0'
-          releaseBody: 'Standalone Windows desktop installer.'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Consistency Tracker ${{ github.ref_name }}'
+          releaseBody: |
+            ## Consistency Tracker ${{ github.ref_name }}
+
+            - Single-file layered architecture with continuous zoom & infinite grid canvas.
+            - Pinned habit tracks with custom width resize, internal scroll, and reordering.
+            - Chronological sprint notes drawer.
+            - Backup export/import with habit merging & Vault protection.
+            - Instant theme presets.
+
+            Download the Windows installer below.
           releaseDraft: false
           prerelease: false
