@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "task-tracker",
+  "productName": "Consistency Tracker",
   "version": "0.1.0",
   "identifier": "com.parixit.consistency-tracker",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "task-tracker",
+        "title": "Consistency Tracker",
         "width": 800,
         "height": 600,
         "resizable": true,
