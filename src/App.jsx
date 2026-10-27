@@ -31,6 +31,59 @@ import {
 } from 'lucide-react';
 
 // ============================================================================
+// LAYER 0: THEME ENGINE & CSS VARIABLES
+// ============================================================================
+
+const STORAGE_THEME_KEY = 'flow_tracker_theme_v2';
+
+const DEFAULT_THEME = {
+  bgCanvas: '#050505',
+  bgRail: '#070707',
+  bgHeader: '#0a0a0a',
+  bgPanel: '#0d0d0d',
+  bgCard: '#141414',
+  borderGrid: 'rgba(255,255,255,0.05)',
+  borderPanel: 'rgba(255,255,255,0.10)',
+  textPrimary: '#ffffff',
+  textSecondary: '#a3a3a3',
+  textMuted: '#525252',
+  accentSunday: '#fbbf24',
+  accentToday: '#ffffff',
+  actionPrimaryBg: '#ffffff',
+  actionPrimaryText: '#000000',
+};
+ function applyTheme(themeObj = {}) {
+  const merged = { ...DEFAULT_THEME, ...(themeObj || {}) };
+  localStorage.setItem(STORAGE_THEME_KEY, JSON.stringify(merged));
+  const root = document.documentElement;
+  root.style.setProperty('--bg-canvas', merged.bgCanvas);
+  root.style.setProperty('--bg-rail', merged.bgRail);
+  root.style.setProperty('--bg-header', merged.bgHeader);
+  root.style.setProperty('--bg-panel', merged.bgPanel);
+  root.style.setProperty('--bg-card', merged.bgCard);
+  root.style.setProperty('--border-grid', merged.borderGrid);
+  root.style.setProperty('--border-panel', merged.borderPanel);
+  root.style.setProperty('--text-primary', merged.textPrimary);
+  root.style.setProperty('--text-secondary', merged.textSecondary);
+  root.style.setProperty('--text-muted', merged.textMuted);
+  root.style.setProperty('--accent-sunday', merged.accentSunday);
+  root.style.setProperty('--accent-today', merged.accentToday);
+  root.style.setProperty('--action-primary-bg', merged.actionPrimaryBg);
+  root.style.setProperty('--action-primary-text', merged.actionPrimaryText);
+  return merged;
+}
+
+ function loadPersistedTheme() {
+  const saved = localStorage.getItem(STORAGE_THEME_KEY);
+  if (!saved) return applyTheme(DEFAULT_THEME);
+  return applyTheme(JSON.parse(saved));
+}
+function resetThemeToDefault() {
+  localStorage.removeItem(STORAGE_THEME_KEY);
+  applyTheme(DEFAULT_THEME);
+}
+
+// ============================================================================
 // LAYER 1: PURE DOMAIN MODEL, STRICT VALIDATION & TIME ENGINE
 // ============================================================================
 
@@ -48,7 +101,7 @@ const STORAGE_TASKS_KEY = 'flow_tracker_tasks_prod';
 const STORAGE_HABITS_KEY = 'flow_tracker_habits_prod';
 const STORAGE_REVISIONS_KEY = 'flow_tracker_revisions_prod';
 
-function formatISODate(date) {
+export function formatISODate(date) {
   if (!(date instanceof Date) || isNaN(date.getTime())) {
     throw new Error('Invalid Date object passed to formatISODate');
   }
@@ -58,7 +111,7 @@ function formatISODate(date) {
   return `${y}-${m}-${d}`;
 }
 
-function parseISODateLocal(isoStr) {
+export function parseISODateLocal(isoStr) {
   if (typeof isoStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoStr)) {
     throw new Error(`Invalid ISO date string: "${isoStr}"`);
   }
@@ -66,7 +119,7 @@ function parseISODateLocal(isoStr) {
   return new Date(y, m - 1, d);
 }
 
-function getWeekNumber(d) {
+export function getWeekNumber(d) {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const dayNum = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 4 - dayNum);
@@ -74,14 +127,14 @@ function getWeekNumber(d) {
   return Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
 }
 
-function generateSafeId(prefix = 'id') {
+export function generateSafeId(prefix = 'id') {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `${prefix}-${crypto.randomUUID()}`;
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-function validateAndNormalizeTask(t) {
+export function validateAndNormalizeTask(t) {
   if (!t || typeof t !== 'object') {
     throw new Error('Corrupt Task Record: Expected an object.');
   }
@@ -108,7 +161,7 @@ function validateAndNormalizeTask(t) {
   };
 }
 
-function validateAndNormalizeHabit(h) {
+export function validateAndNormalizeHabit(h) {
   if (!h || typeof h !== 'object') {
     throw new Error('Corrupt Habit Record: Expected an object.');
   }
@@ -134,7 +187,7 @@ function validateAndNormalizeHabit(h) {
   };
 }
 
-function loadPersistedTasks() {
+export function loadPersistedTasks() {
   const saved = localStorage.getItem(STORAGE_TASKS_KEY);
   if (!saved) return [];
   const parsed = JSON.parse(saved);
@@ -144,7 +197,7 @@ function loadPersistedTasks() {
   return parsed.map(validateAndNormalizeTask);
 }
 
-function loadPersistedHabits() {
+export function loadPersistedHabits() {
   const saved = localStorage.getItem(STORAGE_HABITS_KEY);
   if (!saved) return [];
   const parsed = JSON.parse(saved);
@@ -154,7 +207,7 @@ function loadPersistedHabits() {
   return parsed.map(validateAndNormalizeHabit);
 }
 
-function loadPersistedRevisions() {
+export function loadPersistedRevisions() {
   const saved = localStorage.getItem(STORAGE_REVISIONS_KEY);
   if (!saved) return [];
   const parsed = JSON.parse(saved);
@@ -164,7 +217,7 @@ function loadPersistedRevisions() {
   return parsed;
 }
 
-function persistState(tasks, habits, revisions = []) {
+export function persistState(tasks, habits, revisions = []) {
   localStorage.setItem(STORAGE_TASKS_KEY, JSON.stringify(tasks));
   localStorage.setItem(STORAGE_HABITS_KEY, JSON.stringify(habits));
   if (revisions.length > 0) {
@@ -172,7 +225,7 @@ function persistState(tasks, habits, revisions = []) {
   }
 }
 
-function generateTimelineDays(centerDate = new Date(), tasks = [], habits = []) {
+export function generateTimelineDays(centerDate = new Date(), tasks = [], habits = []) {
   let earliestTime = new Date(centerDate).getTime() - 90 * 86400000;
 
   const scanDates = (dateMap) => {
@@ -226,7 +279,7 @@ function generateTimelineDays(centerDate = new Date(), tasks = [], habits = []) 
 // LAYER 2: PURE GEOMETRY & STREAK ENGINE
 // ============================================================================
 
-function getCalendarWeekDiff(isoA, isoB) {
+export function getCalendarWeekDiff(isoA, isoB) {
   const lastActiveDate = parseISODateLocal(isoA);
   const nextActiveDate = parseISODateLocal(isoB);
 
@@ -241,7 +294,7 @@ function getCalendarWeekDiff(isoA, isoB) {
   return Math.round((nextSunday.getTime() - lastSunday.getTime()) / (7 * 86400000));
 }
 
-function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
+export function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
   const blocks = [];
   let blockStart = null;
   let blockDays = [];
@@ -332,7 +385,7 @@ function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
   return { blocks, cords, currentStreak };
 }
 
-function parseHabitBlocks(habitData, timelineDays) {
+export function parseHabitBlocks(habitData, timelineDays) {
   const blocks = [];
   let start = null;
   let len = 0;
@@ -358,7 +411,7 @@ function parseHabitBlocks(habitData, timelineDays) {
   return blocks;
 }
 
-function computeBoardGeometry({
+export function computeBoardGeometry({
   activeTasks = [],
   habits,
   activeHabits,
@@ -377,10 +430,9 @@ function computeBoardGeometry({
   const habitStep = Math.max(30, Math.round(36 * zoom));
 
   const totalStreamHeight = canvasPadY * 2 + timelineDays.length * rowHeight + 120;
-  const taskCanvasWidth = Math.max(
-    900,
-    canvasPadX * 2 + activeTasks.length * (colWidth + colGap) + 120
-  );
+  const contentWidth = canvasPadX * 2 + activeTasks.length * (colWidth + colGap);
+  const taskCanvasWidth = Math.max(2500, contentWidth + 1500);
+  
 
   const rows = timelineDays.map((d, idx) => {
     const top = canvasPadY + idx * rowHeight;
@@ -618,11 +670,18 @@ function insertNewHabitRecord(habits, { label, hex, position }) {
 
   const parsedPos = parseInt(position, 10);
   const pos = Number.isFinite(parsedPos) ? parsedPos : 1;
-  const targetIndex = Math.max(0, Math.min(pos - 1, habits.length));
+  const activeOnly = habits.filter((h) => !h.isArchived);
+  const targetActiveIndex = Math.max(0, Math.min(pos - 1, activeOnly.length));
 
-  const copy = [...habits];
-  copy.splice(targetIndex, 0, newHabit);
-  return copy;
+  if (targetActiveIndex >= activeOnly.length) {
+    return [...habits, newHabit];
+  } else {
+    const referenceHabit = activeOnly[targetActiveIndex];
+    const realIndex = habits.findIndex((h) => h.id === referenceHabit.id);
+    const copy = [...habits];
+    copy.splice(realIndex, 0, newHabit);
+    return copy;
+  }
 }
 
 function moveTaskOrder(tasks, taskId, direction) {
@@ -644,11 +703,34 @@ function moveTaskOrder(tasks, taskId, direction) {
   return copy;
 }
 
+function moveHabitOrder(habits, habitId, direction) {
+  const activeHabits = habits.filter((h) => !h.isArchived);
+  const fromIndex = activeHabits.findIndex((h) => h.id === habitId);
+  if (fromIndex === -1) return habits;
+
+  const toIndex = direction === 'left' ? fromIndex - 1 : fromIndex + 1;
+  if (toIndex < 0 || toIndex >= activeHabits.length) return habits;
+
+  const targetHabit = activeHabits[toIndex];
+  const fullFrom = habits.findIndex((h) => h.id === habitId);
+  const fullTo = habits.findIndex((h) => h.id === targetHabit.id);
+
+  const copy = [...habits];
+  const temp = copy[fullFrom];
+  copy[fullFrom] = copy[fullTo];
+  copy[fullTo] = temp;
+  return copy;
+}
+
 // ============================================================================
 // MAIN APPLICATION COMPONENT
 // ============================================================================
 
 export default function App() {
+  useEffect(() => {
+    loadPersistedTheme();
+  }, []);
+
   const [tasks, setTasks] = useState(loadPersistedTasks);
   const [habits, setHabits] = useState(loadPersistedHabits);
   const [revisions, setRevisions] = useState(loadPersistedRevisions);
@@ -719,10 +801,12 @@ export default function App() {
     [activeTasks, activeHabits, timelineDays, todayIso, zoom]
   );
 
-  const effectiveHabitRailWidth = useMemo(() => {
-    const minRequiredByTracks = Math.max(120, activeHabits.length * geometry.habitStep + 56);
-    return Math.max(120, Math.min(360, Math.max(habitRailWidth, minRequiredByTracks)));
-  }, [habitRailWidth, activeHabits.length, geometry.habitStep]);
+  // 1. Bidirectional Habit Rail Width (decoupled from habit count) & Inner Scroll Width
+  const effectiveHabitRailWidth = Math.max(80, Math.min(500, habitRailWidth));
+  const habitInnerContentWidth = Math.max(
+    effectiveHabitRailWidth,
+    activeHabits.length * geometry.habitStep + 56
+  );
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: '', hex: '#34d399', position: 1 });
@@ -750,6 +834,8 @@ export default function App() {
 
   const scrollContainerRef = useRef(null);
   const headerTaskScrollRef = useRef(null);
+  const headerHabitScrollRef = useRef(null);
+  const habitScrollRef = useRef(null);
   const fileInputRef = useRef(null);
   const isResizingRailRef = useRef(false);
 
@@ -771,15 +857,16 @@ export default function App() {
     [tasks, habits]
   );
 
-  const focusCurrentWeek = useCallback(
+ const focusCurrentWeek = useCallback(
     (smooth = true) => {
-      if (!scrollContainerRef.current) return;
-      let anchorIdx = todayIndex;
-      while (anchorIdx > 0 && !timelineDays[anchorIdx].isSunday) {
-        anchorIdx--;
-      }
+      if (!scrollContainerRef.current) return;    
+      let startSundayIdx = todayIndex;
+      while (startSundayIdx > 0 && !timelineDays[startSundayIdx].isSunday) {
+        startSundayIdx--;
+      }      
       const targetScroll =
-        geometry.canvasPadY + Math.max(0, anchorIdx - 1) * geometry.rowHeight;
+        geometry.canvasPadY + Math.max(0, startSundayIdx - 1) * geometry.rowHeight;
+
       scrollContainerRef.current.scrollTo({
         top: Math.max(0, targetScroll),
         behavior: smooth ? 'smooth' : 'auto',
@@ -792,11 +879,14 @@ export default function App() {
     focusCurrentWeek(false);
   }, [todayIndex]);
 
+  // 2. Excel-Style Shift + Scroll (Horizontal Scrolling) & Ctrl + Wheel Zoom
   useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
+    const mainEl = scrollContainerRef.current;
+    const habitBodyEl = habitScrollRef.current;
+    const habitHeaderEl = headerHabitScrollRef.current;
+    if (!mainEl) return;
 
-    const handleWheel = (e) => {
+    const handleMainWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const delta = e.deltaY < 0 ? 0.08 : -0.08;
@@ -804,11 +894,41 @@ export default function App() {
           const next = Math.round((prev + delta) * 100) / 100;
           return Math.max(0.6, Math.min(1.6, next));
         });
+        return;
+      }
+      if (e.shiftKey) {
+        e.preventDefault();
+        if (
+          habitBodyEl &&
+          (habitBodyEl.contains(e.target) ||
+            (habitHeaderEl && habitHeaderEl.contains(e.target)))
+        ) {
+          habitBodyEl.scrollLeft += e.deltaY;
+          if (habitHeaderEl) habitHeaderEl.scrollLeft = habitBodyEl.scrollLeft;
+        } else {
+          mainEl.scrollLeft += e.deltaY;
+        }
       }
     };
 
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
+    const handleHabitHeaderWheel = (e) => {
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey && habitHeaderEl && habitBodyEl) {
+        e.preventDefault();
+        habitHeaderEl.scrollLeft += e.deltaY;
+        habitBodyEl.scrollLeft = habitHeaderEl.scrollLeft;
+      }
+    };
+
+    mainEl.addEventListener('wheel', handleMainWheel, { passive: false });
+    if (habitHeaderEl) {
+      habitHeaderEl.addEventListener('wheel', handleHabitHeaderWheel, { passive: false });
+    }
+    return () => {
+      mainEl.removeEventListener('wheel', handleMainWheel);
+      if (habitHeaderEl) {
+        habitHeaderEl.removeEventListener('wheel', handleHabitHeaderWheel);
+      }
+    };
   }, []);
 
   const handleStartRailResize = useCallback(
@@ -821,7 +941,7 @@ export default function App() {
       const handleMouseMove = (moveEvent) => {
         if (!isResizingRailRef.current) return;
         const deltaX = moveEvent.clientX - startX;
-        const nextWidth = Math.max(120, Math.min(360, startWidth + deltaX));
+        const nextWidth = Math.max(80, Math.min(500, startWidth + deltaX));
         setHabitRailWidth(nextWidth);
       };
 
@@ -840,6 +960,18 @@ export default function App() {
   const handleStreamScroll = (e) => {
     if (headerTaskScrollRef.current) {
       headerTaskScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+  };
+
+  const handleHabitBodyScroll = (e) => {
+    if (headerHabitScrollRef.current) {
+      headerHabitScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+  };
+
+  const handleHabitHeaderScroll = (e) => {
+    if (habitScrollRef.current) {
+      habitScrollRef.current.scrollLeft = e.target.scrollLeft;
     }
   };
 
@@ -873,6 +1005,7 @@ export default function App() {
     }
   };
 
+  // 5. Drop-in Theme Feeder Detection or Backup Import
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -880,8 +1013,12 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const parsed = JSON.parse(ev.target.result);
+      if (parsed && (parsed.theme || parsed.bgCanvas)) {
+        applyTheme(parsed.theme || parsed);
+        return;
+      }
       if (!parsed || !Array.isArray(parsed.tasks)) {
-        throw new Error('Invalid backup file: Root JSON must contain a "tasks" array.');
+        throw new Error('Invalid JSON file: Must be a backup (containing "tasks") or a theme file (containing "theme" or "bgCanvas").');
       }
       const validatedTasks = parsed.tasks.map(validateAndNormalizeTask);
       const validatedHabits = Array.isArray(parsed.habits)
@@ -1099,10 +1236,13 @@ export default function App() {
   }, [selectedTaskId, todayStatus, todayIso, handleArchiveTask]);
 
   const activeHabitForPopout = habits.find((h) => h.id === activeHabitPopoutId) || null;
+  const activeHabitPopoutIndex = activeHabitForPopout
+    ? activeHabits.findIndex((h) => h.id === activeHabitForPopout.id)
+    : -1;
   const notesDrawerTask = activeTasks.find((t) => t.id === notesDrawerTaskId) || null;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#050505] text-white font-mono select-none overflow-hidden relative">
+    <div className="flex flex-col h-screen w-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] font-mono select-none overflow-hidden relative">
       <input
         type="file"
         ref={fileInputRef}
@@ -1112,16 +1252,19 @@ export default function App() {
       />
 
       {/* TOP NAVIGATION & CONTROLS BAR */}
-      <header className="h-14 border-b border-white/10 bg-[#0a0a0a] flex items-center px-6 shrink-0 z-40 justify-between">
+      <header className="h-14 border-b border-[var(--border-panel)] bg-[var(--bg-header)] flex items-center px-6 shrink-0 z-40 justify-between">
         <div className="flex items-center gap-5">
-          <span className="text-[11px] font-black tracking-[0.2em] uppercase text-neutral-400">
+          <span className="text-[11px] font-black tracking-[0.2em] uppercase text-[var(--text-secondary)]">
             Sprint Board
           </span>
-          <div className="h-4 w-[1px] bg-white/10" />
-          <div className="text-[11px] text-neutral-300 font-bold tracking-widest uppercase">
+          <div className="h-4 w-[1px] bg-[var(--border-panel)]" />
+          <div className="text-[11px] text-[var(--text-secondary)] font-bold tracking-widest uppercase">
             Week {currentDayInfo.weekNum}{' '}
-            <span className="text-neutral-600 mx-2">/</span>
-            <span className={currentDayInfo.isSunday ? 'text-amber-400 font-black' : ''}>
+            <span className="text-[var(--text-muted)] mx-2">/</span>
+            <span
+              style={currentDayInfo.isSunday ? { color: 'var(--accent-sunday)' } : undefined}
+              className={currentDayInfo.isSunday ? 'font-black' : 'text-[var(--text-primary)]'}
+            >
               {currentDayInfo.dayName} {currentDayInfo.dateStr}
             </span>
           </div>
@@ -1132,8 +1275,8 @@ export default function App() {
             onClick={() => setHistoryUnlocked((prev) => !prev)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
               historyUnlocked
-                ? 'bg-amber-500/15 border-amber-400/50 text-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.2)]'
-                : 'bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10'
+                ? 'bg-amber-500/15 border-amber-400/50 text-[var(--accent-sunday)] shadow-[0_0_10px_rgba(251,191,36,0.2)]'
+                : 'bg-white/5 border-[var(--border-panel)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/10'
             }`}
             title="Unlock past days to backfill missed entries"
           >
@@ -1141,24 +1284,24 @@ export default function App() {
             <span>{historyUnlocked ? 'History Unlocked' : 'Unlock History'}</span>
           </button>
 
-          <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full px-2 py-1">
+          <div className="flex items-center gap-1 bg-white/5 border border-[var(--border-panel)] rounded-full px-2 py-1">
             <button
               onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
-              className="p-1 text-neutral-400 hover:text-white cursor-pointer"
+              className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
               title="Zoom Out (or Ctrl + Scroll)"
             >
               <ZoomOut size={12} />
             </button>
             <button
               onClick={() => setZoom(1.0)}
-              className="text-[10px] font-bold text-neutral-300 hover:text-white px-1.5 cursor-pointer"
+              className="text-[10px] font-bold text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-1.5 cursor-pointer"
               title="Reset Zoom to 100%"
             >
               {Math.round(zoom * 100)}%
             </button>
             <button
               onClick={() => setZoom((z) => Math.min(1.6, Math.round((z + 0.1) * 10) / 10))}
-              className="p-1 text-neutral-400 hover:text-white cursor-pointer"
+              className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
               title="Zoom In (or Ctrl + Scroll)"
             >
               <ZoomIn size={12} />
@@ -1167,43 +1310,50 @@ export default function App() {
 
           <button
             onClick={() => focusCurrentWeek(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-[var(--border-panel)] hover:bg-white/10 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
             title="Anchor view to current sprint week"
           >
             <LocateFixed size={13} />
             <span>Focus Week</span>
           </button>
 
-          <div className="flex items-center gap-1 border-l border-white/10 pl-2.5">
+          <div className="flex items-center gap-1 border-l border-[var(--border-panel)] pl-2.5">
             <button
               onClick={handleExportBackup}
-              className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              className="p-2 hover:bg-white/10 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
               title="Save Backup JSON (Save As)"
             >
               <Download size={14} />
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              title="Import Tracks from Backup JSON"
+              className="p-2 hover:bg-white/10 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+              title="Import Backup JSON or Drop-in Theme JSON"
             >
               <Upload size={14} />
             </button>
             <button
+              onClick={resetThemeToDefault}
+              className="p-2 hover:bg-white/10 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+              title="Reset Theme to Default Obsidian"
+            >
+              <RotateCcw size={14} />
+            </button>
+            <button
               onClick={() => setRevisionsModalOpen(true)}
-              className="p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              className="p-2 hover:bg-white/10 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
               title="Board Snapshots & Rollbacks"
             >
               <Layers size={14} />
             </button>
             <button
               onClick={() => setVaultOpen(true)}
-              className="relative p-2 hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              className="relative p-2 hover:bg-white/10 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
               title="Open Archive Vault"
             >
               <Archive size={14} />
-              {archivedTasks.length > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500" />
+              {(archivedTasks.length > 0 || archivedHabits.length > 0) && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[var(--accent-sunday)]" />
               )}
             </button>
           </div>
@@ -1213,7 +1363,7 @@ export default function App() {
               setTaskForm({ title: '', hex: '#34d399', position: activeTasks.length + 1 });
               setTaskModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white text-black hover:bg-neutral-200 transition-colors text-[10px] font-black tracking-widest uppercase cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 transition-opacity text-[10px] font-black tracking-widest uppercase cursor-pointer"
           >
             <Plus size={14} strokeWidth={3} />
             <span>New Task</span>
@@ -1222,78 +1372,126 @@ export default function App() {
       </header>
 
       {/* STICKY SUB-HEADER: HABIT BADGES + RESIZE HANDLE + DATE + TASK CARDS */}
-      <div className="h-14 border-b border-white/10 bg-[#0a0a0a] flex shrink-0 z-30 relative">
+      <div className="h-14 border-b border-[var(--border-panel)] bg-[var(--bg-header)] flex shrink-0 z-30 relative">
         <div
           style={{ width: `${effectiveHabitRailWidth}px` }}
-          className="border-r border-white/10 relative shrink-0 z-20 bg-[#0a0a0a] flex items-center"
+          className="border-r border-[var(--border-panel)] relative shrink-0 z-20 bg-[var(--bg-header)] flex items-center"
         >
-          {geometry.habitLanes.map(({ habit, idx, centerX }) => {
-            const firstLetter = habit.label.charAt(0).toUpperCase();
-            const isStaggered = idx % 2 === 1;
-            const isSelected = activeHabitPopoutId === habit.id;
-
-            return (
-              <div
-                key={habit.id}
-                style={{ left: `${centerX}px` }}
-                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
-              >
-                <button
-                  onClick={() => {
-                    if (isSelected) {
-                      setActiveHabitPopoutId(null);
-                    } else {
-                      setActiveHabitPopoutId(habit.id);
-                      setHabitPopoutForm({ label: habit.label, hex: habit.hex });
-                    }
-                  }}
-                  style={{
-                    transform: isStaggered ? 'translateY(6px)' : 'translateY(-6px)',
-                    borderColor: habit.hex,
-                    color: habit.hex,
-                    boxShadow: isSelected ? `0 0 10px ${habit.hex}80` : 'none',
-                  }}
-                  className="w-6 h-6 rounded-full border-2 bg-[#121212] hover:scale-110 flex items-center justify-center text-[10px] font-black tracking-wider transition-transform cursor-pointer"
-                  title={`${habit.label} — Click to edit`}
-                >
-                  {firstLetter}
-                </button>
-              </div>
-            );
-          })}
-
-          <button
-            onClick={() => {
-              setHabitForm({ label: '', hex: '#22d3ee', position: activeHabits.length + 1 });
-              setHabitModalOpen(true);
-            }}
-            title="Add Habit Track"
-            style={{
-              left: `${
-                activeHabits.length > 0
-                  ? 24 + activeHabits.length * geometry.habitStep + 4
-                  : 24
-              }px`,
-            }}
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer border border-dashed border-white/20 hover:border-white/50"
+          {/* Synced Horizontal Scroll Container for Habit Header Badges */}
+          <div
+            ref={headerHabitScrollRef}
+            onScroll={handleHabitHeaderScroll}
+            className="w-full h-full overflow-x-auto no-scrollbar relative"
           >
-            <Plus size={12} />
-          </button>
+            <div
+              style={{ width: `${habitInnerContentWidth}px`, height: '100%' }}
+              className="relative"
+            >
+              {geometry.habitLanes.map(({ habit, idx, centerX }) => {
+                const firstLetter = habit.label.charAt(0).toUpperCase();
+                const isStaggered = idx % 2 === 1;
+                const isSelected = activeHabitPopoutId === habit.id;
+
+                return (
+                  <div
+                    key={habit.id}
+                    style={{ left: `${centerX}px` }}
+                    className="group absolute top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                  >
+                    <div
+                      style={{
+                        transform: isStaggered ? 'translateY(6px)' : 'translateY(-6px)',
+                      }}
+                      className="relative flex items-center justify-center"
+                    >
+                      {/* Hover Reorder Left (<) */}
+                      {idx > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            snapshotState(`Reorder Habit Left: ${habit.label}`);
+                            setHabits((prev) => moveHabitOrder(prev, habit.id, 'left'));
+                          }}
+                          title="Move Habit Left"
+                          className="opacity-0 group-hover:opacity-100 absolute -left-3.5 z-30 w-3.5 h-3.5 rounded-full bg-[var(--bg-panel)] border border-[var(--border-panel)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-opacity"
+                        >
+                          <ChevronLeft size={9} />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          if (isSelected) {
+                            setActiveHabitPopoutId(null);
+                          } else {
+                            setActiveHabitPopoutId(habit.id);
+                            setHabitPopoutForm({ label: habit.label, hex: habit.hex });
+                          }
+                        }}
+                        style={{
+                          borderColor: habit.hex,
+                          color: habit.hex,
+                          boxShadow: isSelected ? `0 0 10px ${habit.hex}80` : 'none',
+                        }}
+                        className="w-6 h-6 rounded-full border-2 bg-[var(--bg-card)] hover:scale-110 flex items-center justify-center text-[10px] font-black tracking-wider transition-transform cursor-pointer"
+                        title={`${habit.label} — Click to edit`}
+                      >
+                        {firstLetter}
+                      </button>
+
+                      {/* Hover Reorder Right (>) */}
+                      {idx < activeHabits.length - 1 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            snapshotState(`Reorder Habit Right: ${habit.label}`);
+                            setHabits((prev) => moveHabitOrder(prev, habit.id, 'right'));
+                          }}
+                          title="Move Habit Right"
+                          className="opacity-0 group-hover:opacity-100 absolute -right-3.5 z-30 w-3.5 h-3.5 rounded-full bg-[var(--bg-panel)] border border-[var(--border-panel)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-opacity"
+                        >
+                          <ChevronRight size={9} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <button
+                onClick={() => {
+                  setHabitForm({ label: '', hex: '#22d3ee', position: activeHabits.length + 1 });
+                  setHabitModalOpen(true);
+                }}
+                title="Add Habit Track"
+                style={{
+                  left: `${
+                    activeHabits.length > 0
+                      ? 24 + activeHabits.length * geometry.habitStep + 4
+                      : 24
+                  }px`,
+                }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer border border-dashed border-[var(--border-panel)]"
+              >
+                <Plus size={12} />
+              </button>
+            </div>
+          </div>
 
           <div
             onMouseDown={handleStartRailResize}
-            title="Drag to resize Habit Rail"
+            title="Drag to resize Habit Rail (shrink or expand)"
             className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-amber-400/40 transition-colors flex items-center justify-center z-30"
           >
-            <GripVertical size={10} className="text-neutral-600 pointer-events-none" />
+            <GripVertical size={10} className="text-[var(--text-muted)] pointer-events-none" />
           </div>
         </div>
 
         <div
           style={{ width: `${DATE_COL_WIDTH}px` }}
-          className="border-r border-white/10 flex items-center justify-center shrink-0 z-20 bg-[#0a0a0a]"
+          className="border-r border-[var(--border-panel)] flex items-center justify-center shrink-0 z-20 bg-[var(--bg-header)]"
         >
-          <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">
+          <span className="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest">
             DATE
           </span>
         </div>
@@ -1311,7 +1509,9 @@ export default function App() {
                   style={{ left: `${left}px`, width: `${width}px` }}
                   onClick={() => setSelectedTaskId(task.id)}
                   className={`group absolute h-full flex flex-col items-center justify-center px-1 cursor-pointer transition-colors ${
-                    isSelected ? 'text-white bg-white/[0.03]' : 'text-neutral-400 hover:text-neutral-200'
+                    isSelected
+                      ? 'text-[var(--text-primary)] bg-white/[0.03]'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   <div className="flex items-center gap-1 justify-center w-full">
@@ -1324,8 +1524,8 @@ export default function App() {
                       }}
                       className={`opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 transition-opacity ${
                         idx === 0
-                          ? ' invisible'
-                          : 'text-neutral-500 hover:text-white cursor-pointer'
+                          ? 'invisible'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer'
                       }`}
                       title="Shift Left"
                     >
@@ -1358,7 +1558,7 @@ export default function App() {
                             setEditingTaskId(null);
                           }
                         }}
-                        className="w-20 bg-black border border-white/30 rounded px-1 text-[10px] text-center text-white outline-none uppercase"
+                        className="w-20 bg-[var(--bg-card)] border border-[var(--border-panel)] rounded px-1 text-[10px] text-center text-[var(--text-primary)] outline-none uppercase"
                       />
                     ) : (
                       <span
@@ -1384,7 +1584,7 @@ export default function App() {
                       className={`opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 transition-opacity ${
                         idx === activeTasks.length - 1
                           ? 'invisible'
-                          : 'text-neutral-500 hover:text-white cursor-pointer'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer'
                       }`}
                       title="Shift Right"
                     >
@@ -1394,11 +1594,13 @@ export default function App() {
 
                   <div className="flex items-center gap-2 mt-0.5">
                     {currentStreak > 0 ? (
-                      <span className="text-[10px] text-amber-400 font-bold">
-                        🔥 {currentStreak}d
+                      <span className="text-[10px] text-[var(--accent-sunday)] font-bold">
+                         {currentStreak}d
                       </span>
                     ) : (
-                      <span className="text-[9px] text-neutral-600 font-mono">{totalDays}d</span>
+                      <span className="text-[9px] text-[var(--text-muted)] font-mono">
+                        {totalDays}d
+                      </span>
                     )}
 
                     <button
@@ -1407,7 +1609,7 @@ export default function App() {
                         setSelectedTaskId(task.id);
                         setNotesDrawerTaskId(task.id);
                       }}
-                      className="text-neutral-500 hover:text-white transition-colors cursor-pointer"
+                      className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                       title="Open Sprint Notes Drawer"
                     >
                       <FileText size={10} />
@@ -1418,7 +1620,7 @@ export default function App() {
                         e.stopPropagation();
                         setHistoryModalTask(task);
                       }}
-                      className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-white transition-opacity cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-opacity cursor-pointer"
                       title="Name Evolution History"
                     >
                       <History size={10} />
@@ -1435,69 +1637,83 @@ export default function App() {
       <div
         ref={scrollContainerRef}
         onScroll={handleStreamScroll}
-        className="flex-1 overflow-y-auto overflow-x-auto flex relative bg-[#050505] no-scrollbar select-none"
+        className="flex-1 overflow-y-auto overflow-x-auto flex relative bg-[var(--bg-canvas)] no-scrollbar select-none"
       >
-        {/* LAYER 1: PINNED HABIT RAILS */}
+        {/* LAYER 1: PINNED HABIT RAILS WITH INTERNAL HORIZONTAL SCROLL */}
         <div
           style={{
             width: `${effectiveHabitRailWidth}px`,
             height: `${geometry.totalStreamHeight}px`,
           }}
-          className="border-r border-white/10 bg-[#070707]/95 shrink-0 z-20 sticky left-0 shadow-lg"
+          className="border-r border-[var(--border-panel)] bg-[var(--bg-rail)] shrink-0 z-35 sticky left-0 shadow-lg"
         >
-          {geometry.habitLanes.map(({ habit, centerX, pillSegments }) => (
+          <div
+            ref={habitScrollRef}
+            onScroll={handleHabitBodyScroll}
+            className="w-full h-full overflow-x-auto no-scrollbar relative"
+          >
             <div
-              key={habit.id}
-              className="absolute inset-y-0"
-              style={{ left: `${centerX - 8}px`, width: '16px' }}
+              style={{
+                width: `${habitInnerContentWidth}px`,
+                height: `${geometry.totalStreamHeight}px`,
+              }}
+              className="relative"
             >
-              <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-white/[0.04] rounded-full" />
-
-              {pillSegments.map((seg, sIdx) => (
+              {geometry.habitLanes.map(({ habit, centerX, pillSegments }) => (
                 <div
-                  key={sIdx}
-                  style={{
-                    top: `${seg.top}px`,
-                    height: `${seg.height}px`,
-                    backgroundColor: habit.hex,
-                    boxShadow: `0 0 8px ${habit.hex}70`,
-                  }}
-                  className="absolute left-1/2 -translate-x-1/2 w-[6px] rounded-full pointer-events-none"
-                />
-              ))}
+                  key={habit.id}
+                  className="absolute inset-y-0"
+                  style={{ left: `${centerX - 8}px`, width: '16px' }}
+                >
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-[var(--border-grid)] rounded-full" />
 
-              {geometry.rows.map((r) => {
-                const isToday = r.isoDate === todayIso;
-                const isPastOrToday = r.isoDate <= todayIso;
-                const canToggle = isToday || (historyUnlocked && isPastOrToday);
-                const isTicked = habit.data?.[r.isoDate] === 1;
+                  {pillSegments.map((seg, sIdx) => (
+                    <div
+                      key={sIdx}
+                      style={{
+                        top: `${seg.top}px`,
+                        height: `${seg.height}px`,
+                        backgroundColor: habit.hex,
+                        boxShadow: `0 0 8px ${habit.hex}70`,
+                      }}
+                      className="absolute left-1/2 -translate-x-1/2 w-[6px] rounded-full pointer-events-none"
+                    />
+                  ))}
 
-                return (
-                  <div
-                    key={r.isoDate}
-                    style={{ top: `${r.top}px`, height: `${r.height}px` }}
-                    onClick={() => {
-                      if (!canToggle) return;
-                      setHabits((prev) => toggleHabitDate(prev, habit.id, r.isoDate));
-                    }}
-                    className={`group absolute inset-x-0 flex items-center justify-center ${
-                      canToggle ? 'cursor-pointer' : 'cursor-default'
-                    }`}
-                  >
-                    {canToggle && !isTicked && (
+                  {geometry.rows.map((r) => {
+                    const isToday = r.isoDate === todayIso;
+                    const isPastOrToday = r.isoDate <= todayIso;
+                    const canToggle = isToday || (historyUnlocked && isPastOrToday);
+                    const isTicked = habit.data?.[r.isoDate] === 1;
+
+                    return (
                       <div
-                        className={`w-3 h-3 rounded-full border border-dashed transition-colors ${
-                          isToday
-                            ? 'border-white/25 hover:border-white/70'
-                            : 'border-amber-400/0 group-hover:border-amber-400/60'
+                        key={r.isoDate}
+                        style={{ top: `${r.top}px`, height: `${r.height}px` }}
+                        onClick={() => {
+                          if (!canToggle) return;
+                          setHabits((prev) => toggleHabitDate(prev, habit.id, r.isoDate));
+                        }}
+                        className={`group absolute inset-x-0 flex items-center justify-center ${
+                          canToggle ? 'cursor-pointer' : 'cursor-default'
                         }`}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                      >
+                        {canToggle && !isTicked && (
+                          <div
+                            className={`w-3 h-3 rounded-full border border-dashed transition-colors ${
+                              isToday
+                                ? 'border-white/25 hover:border-white/70'
+                                : 'border-amber-400/0 group-hover:border-amber-400/60'
+                            }`}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
 
           <div
             onMouseDown={handleStartRailResize}
@@ -1512,7 +1728,7 @@ export default function App() {
             height: `${geometry.totalStreamHeight}px`,
             left: `${effectiveHabitRailWidth}px`,
           }}
-          className="border-r border-white/10 bg-[#070707]/95 shrink-0 z-20 sticky shadow-[8px_0_16px_rgba(0,0,0,0.6)]"
+          className="border-r border-[var(--border-panel)] bg-[var(--bg-rail)] shrink-0 z-35 sticky shadow-[8px_0_16px_rgba(0,0,0,0.6)]"
         >
           {geometry.rows.map((r) => {
             const isToday = r.isoDate === todayIso;
@@ -1523,32 +1739,45 @@ export default function App() {
                 className="absolute w-full flex items-center px-2.5"
               >
                 <div
+                  style={
+                    isToday
+                      ? { borderColor: 'var(--accent-today)' }
+                      : r.isSunday
+                      ? { borderColor: 'var(--accent-sunday)' }
+                      : undefined
+                  }
                   className={`w-full py-1.5 px-2 rounded flex flex-col items-center justify-center border transition-all ${
                     isToday
-                      ? 'border-white/40 bg-white/10 shadow-sm'
+                      ? 'bg-white/10 shadow-sm'
                       : r.isSunday
-                      ? 'border-amber-400/35 bg-amber-400/10 shadow-[0_0_10px_rgba(251,191,36,0.08)]'
+                      ? 'bg-amber-400/10 shadow-[0_0_10px_rgba(251,191,36,0.08)]'
                       : 'border-transparent'
                   }`}
                 >
                   <span
-                    className={`text-[10px] font-black ${
+                    style={
                       isToday
-                        ? 'text-white'
+                        ? { color: 'var(--accent-today)' }
                         : r.isSunday
-                        ? 'text-amber-400'
-                        : 'text-neutral-500'
+                        ? { color: 'var(--accent-sunday)' }
+                        : undefined
+                    }
+                    className={`text-[10px] font-black ${
+                      !isToday && !r.isSunday ? 'text-[var(--text-secondary)]' : ''
                     }`}
                   >
                     {r.dayName}
                   </span>
                   <span
-                    className={`text-[9px] font-mono ${
+                    style={
                       isToday
-                        ? 'text-white font-bold'
+                        ? { color: 'var(--accent-today)' }
                         : r.isSunday
-                        ? 'text-amber-300/80 font-bold'
-                        : 'text-neutral-600'
+                        ? { color: 'var(--accent-sunday)' }
+                        : undefined
+                    }
+                    className={`text-[9px] font-mono ${
+                      isToday || r.isSunday ? 'font-bold' : 'text-[var(--text-muted)]'
                     }`}
                   >
                     {r.dateStr}
@@ -1574,13 +1803,21 @@ export default function App() {
               return (
                 <div
                   key={r.isoDate}
-                  style={{ top: `${r.top}px`, height: `${r.height}px` }}
+                  style={{
+                    top: `${r.top}px`,
+                    height: `${r.height}px`,
+                    borderColor: isToday
+                      ? 'var(--accent-today)'
+                      : r.isSunday
+                      ? 'var(--accent-sunday)'
+                      : 'var(--border-grid)',
+                  }}
                   className={`absolute w-full border-b ${
                     isToday
-                      ? 'border-white/25 bg-white/[0.02]'
+                      ? 'opacity-30 bg-white/[0.02]'
                       : r.isSunday
-                      ? 'border-amber-400/20 bg-amber-400/[0.01]'
-                      : 'border-white/[0.05]'
+                      ? 'opacity-25 bg-amber-400/[0.01]'
+                      : ''
                   }`}
                 />
               );
@@ -1622,7 +1859,7 @@ export default function App() {
                     isSelected ? 'bg-white/[0.035]' : 'hover:bg-white/[0.015]'
                   }`}
                 >
-                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[1px] bg-white/[0.05] pointer-events-none" />
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[1px] bg-[var(--border-grid)] pointer-events-none" />
 
                   {historyUnlocked &&
                     geometry.rows.map((r) => {
@@ -1678,7 +1915,7 @@ export default function App() {
                     boxShadow: `0 0 10px ${task.hex}60`,
                   }}
                   className={`absolute rounded-full flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-[1.03] z-20 ${
-                    blk.isActive ? 'ring-[3px] ring-white' : ''
+                    blk.isActive ? 'ring-[3px] ring-[var(--accent-today)]' : ''
                   }`}
                 >
                   <span className="text-[10px] font-black text-black/85 rotate-90 select-none">
@@ -1698,12 +1935,12 @@ export default function App() {
       </div>
 
       {/* BOTTOM ACTION DOCK */}
-      <footer className="h-16 border-t border-white/10 bg-[#0a0a0a] flex items-center justify-between px-8 shrink-0 z-40">
+      <footer className="h-16 border-t border-[var(--border-panel)] bg-[var(--bg-header)] flex items-center justify-between px-8 shrink-0 z-40">
         <div className="flex items-center gap-4">
-          <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
+          <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
             Selected:
           </span>
-          <span className="text-[12px] font-black uppercase tracking-widest text-white">
+          <span className="text-[12px] font-black uppercase tracking-widest text-[var(--text-primary)]">
             {selectedTask ? selectedTask.title : 'None'}
           </span>
 
@@ -1721,7 +1958,7 @@ export default function App() {
 
               <button
                 onClick={() => setNotesDrawerTaskId(selectedTask.id)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-200 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 border border-[var(--border-panel)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
               >
                 <FileText size={11} />
                 <span>Sprint Notes</span>
@@ -1729,7 +1966,7 @@ export default function App() {
 
               <button
                 onClick={() => handleArchiveTask(selectedTask.id)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-[var(--accent-sunday)] text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer"
                 title="Archive channel to Vault (Delete key)"
               >
                 <Archive size={12} />
@@ -1747,11 +1984,11 @@ export default function App() {
             }
             className={`flex items-center gap-2 px-6 py-2 rounded-full text-[10px] font-black tracking-widest uppercase transition-colors ${
               !selectedTask || todayStatus === 2
-                ? 'bg-white/5 text-white/20 cursor-default'
-                : 'bg-white text-black hover:bg-neutral-200 cursor-pointer'
+                ? 'bg-white/5 text-[var(--text-muted)] cursor-default'
+                : 'bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 cursor-pointer'
             }`}
           >
-            <Play size={14} fill={!selectedTask || todayStatus === 2 ? 'currentColor' : 'black'} />
+            <Play size={14} fill="currentColor" />
             <span>Start Today</span>
           </button>
 
@@ -1762,14 +1999,11 @@ export default function App() {
             }
             className={`flex items-center gap-2 px-6 py-2 rounded-full text-[10px] font-black tracking-widest uppercase transition-colors border ${
               !selectedTask || todayStatus !== 2
-                ? 'border-white/5 text-white/20 cursor-default'
-                : 'border-white text-white hover:bg-white/10 cursor-pointer'
+                ? 'border-[var(--border-grid)] text-[var(--text-muted)] cursor-default'
+                : 'border-[var(--text-primary)] text-[var(--text-primary)] hover:bg-white/10 cursor-pointer'
             }`}
           >
-            <Square
-              size={14}
-              fill={!selectedTask || todayStatus !== 2 ? 'currentColor' : 'white'}
-            />
+            <Square size={14} fill="currentColor" />
             <span>Mark Ended</span>
           </button>
 
@@ -1780,7 +2014,7 @@ export default function App() {
             }
             className={`flex items-center gap-2 px-6 py-2 rounded-full text-[10px] font-black tracking-widest uppercase transition-colors border ${
               !selectedTask || todayStatus === 0
-                ? 'border-white/5 text-white/20 cursor-default'
+                ? 'border-[var(--border-grid)] text-[var(--text-muted)] cursor-default'
                 : 'border-red-500/40 text-red-400 hover:bg-red-500/10 cursor-pointer'
             }`}
           >
@@ -1798,28 +2032,68 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-5 flex flex-col gap-4"
+            className="w-full max-w-xs bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded-2xl shadow-2xl p-5 flex flex-col gap-4"
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-[var(--border-panel)] pb-3">
               <div className="flex items-center gap-2">
                 <span
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: habitPopoutForm.hex }}
                 />
-                <span className="text-[11px] font-black uppercase tracking-widest text-white">
+                <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]">
                   Edit Habit Track
                 </span>
               </div>
-              <button
-                onClick={() => setActiveHabitPopoutId(null)}
-                className="text-neutral-500 hover:text-white cursor-pointer"
-              >
-                <X size={15} />
-              </button>
+
+              <div className="flex items-center gap-1">
+                {/* Habit Reorder Buttons in Popout Header */}
+                <button
+                  type="button"
+                  disabled={activeHabitPopoutIndex <= 0}
+                  onClick={() => {
+                    snapshotState(`Reorder Habit Left: ${activeHabitForPopout.label}`);
+                    setHabits((prev) => moveHabitOrder(prev, activeHabitForPopout.id, 'left'));
+                  }}
+                  title="Move Habit Left"
+                  className={`p-1 rounded hover:bg-white/10 ${
+                    activeHabitPopoutIndex <= 0
+                      ? 'opacity-20 cursor-default'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer'
+                  }`}
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    activeHabitPopoutIndex === -1 ||
+                    activeHabitPopoutIndex >= activeHabits.length - 1
+                  }
+                  onClick={() => {
+                    snapshotState(`Reorder Habit Right: ${activeHabitForPopout.label}`);
+                    setHabits((prev) => moveHabitOrder(prev, activeHabitForPopout.id, 'right'));
+                  }}
+                  title="Move Habit Right"
+                  className={`p-1 rounded hover:bg-white/10 ${
+                    activeHabitPopoutIndex === -1 ||
+                    activeHabitPopoutIndex >= activeHabits.length - 1
+                      ? 'opacity-20 cursor-default'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer'
+                  }`}
+                >
+                  <ChevronRight size={14} />
+                </button>
+                <button
+                  onClick={() => setActiveHabitPopoutId(null)}
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] ml-1 cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
             </div>
 
             <div>
-              <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+              <label className="text-[9px] uppercase tracking-widest font-black text-[var(--text-secondary)] block mb-1.5">
                 Habit Name (Max 16 chars)
               </label>
               <input
@@ -1833,15 +2107,15 @@ export default function App() {
                     label: e.target.value.toUpperCase(),
                   }))
                 }
-                className="w-full bg-[#141414] border border-white/15 rounded-lg px-3 py-2 text-xs text-white uppercase outline-none focus:border-white/40"
+                className="w-full bg-[var(--bg-card)] border border-[var(--border-panel)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] uppercase outline-none"
               />
             </div>
 
             <div>
-              <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+              <label className="text-[9px] uppercase tracking-widest font-black text-[var(--text-secondary)] block mb-1.5">
                 Neon Color
               </label>
-              <div className="flex items-center gap-3 bg-[#141414] p-2 rounded-lg border border-white/10">
+              <div className="flex items-center gap-3 bg-[var(--bg-card)] p-2 rounded-lg border border-[var(--border-panel)]">
                 <input
                   type="color"
                   value={habitPopoutForm.hex}
@@ -1850,32 +2124,32 @@ export default function App() {
                   }
                   className="w-8 h-8 rounded-full cursor-pointer bg-transparent border-none outline-none"
                 />
-                <span className="text-xs font-mono uppercase text-white font-bold">
+                <span className="text-xs font-mono uppercase text-[var(--text-primary)] font-bold">
                   {habitPopoutForm.hex}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-neutral-400 bg-[#141414] px-3 py-2 rounded-lg border border-white/5">
+            <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)] bg-[var(--bg-card)] px-3 py-2 rounded-lg border border-[var(--border-grid)]">
               <span>Total Logged Days:</span>
-              <span className="text-white font-bold">
+              <span className="text-[var(--text-primary)] font-bold">
                 {Object.values(activeHabitForPopout.data || {}).filter((v) => v === 1).length} Days
               </span>
             </div>
 
             {(activeHabitForPopout.nameHistory || []).length > 1 && (
-              <div className="text-[9px] text-neutral-400 space-y-1 max-h-24 overflow-y-auto border-t border-white/10 pt-2">
-                <div className="uppercase text-neutral-500 font-bold">Past Names:</div>
+              <div className="text-[9px] text-[var(--text-secondary)] space-y-1 max-h-24 overflow-y-auto border-t border-[var(--border-panel)] pt-2">
+                <div className="uppercase text-[var(--text-muted)] font-bold">Past Names:</div>
                 {activeHabitForPopout.nameHistory.map((item, i) => (
                   <div key={i} className="flex justify-between">
                     <span>• {item.title}</span>
-                    <span className="text-neutral-600">{item.at}</span>
+                    <span className="text-[var(--text-muted)]">{item.at}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="flex items-center justify-between pt-2 border-t border-white/10 gap-2">
+            <div className="flex items-center justify-between pt-2 border-t border-[var(--border-panel)] gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -1887,7 +2161,7 @@ export default function App() {
                   );
                   setActiveHabitPopoutId(null);
                 }}
-                className="flex items-center gap-1 px-3 py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                className="flex items-center gap-1 px-3 py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-[var(--accent-sunday)] text-[10px] font-bold uppercase tracking-wider cursor-pointer"
               >
                 <Archive size={12} />
                 <span>Archive</span>
@@ -1919,7 +2193,7 @@ export default function App() {
                   );
                   setActiveHabitPopoutId(null);
                 }}
-                className="flex-1 py-2 rounded-lg bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                className="flex-1 py-2 rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 text-[10px] font-black uppercase tracking-wider cursor-pointer"
               >
                 Save
               </button>
@@ -1936,21 +2210,21 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-5 flex flex-col gap-4"
+            className="w-full max-w-xs bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded-2xl shadow-2xl p-5 flex flex-col gap-4"
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <span className="text-[11px] font-black uppercase tracking-widest text-white">
+            <div className="flex items-center justify-between border-b border-[var(--border-panel)] pb-3">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]">
                 Channel Color — {selectedTask.title}
               </span>
               <button
                 onClick={() => setDockColorPickerOpen(false)}
-                className="text-neutral-500 hover:text-white cursor-pointer"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 <X size={15} />
               </button>
             </div>
 
-            <div className="flex items-center gap-3 bg-[#141414] p-3 rounded-xl border border-white/10">
+            <div className="flex items-center gap-3 bg-[var(--bg-card)] p-3 rounded-xl border border-[var(--border-panel)]">
               <input
                 type="color"
                 value={selectedTask.hex}
@@ -1962,14 +2236,14 @@ export default function App() {
                 }}
                 className="w-10 h-10 rounded-full cursor-pointer bg-transparent border-none outline-none"
               />
-              <span className="text-sm font-mono uppercase text-white font-bold">
+              <span className="text-sm font-mono uppercase text-[var(--text-primary)] font-bold">
                 {selectedTask.hex}
               </span>
             </div>
 
             <button
               onClick={() => setDockColorPickerOpen(false)}
-              className="w-full py-2 rounded-lg bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider cursor-pointer"
+              className="w-full py-2 rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 text-[10px] font-black uppercase tracking-wider cursor-pointer"
             >
               Done
             </button>
@@ -1994,14 +2268,14 @@ export default function App() {
       {/* 5D: TASK MODAL */}
       {taskModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
+          <div className="w-full max-w-sm bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black uppercase tracking-widest text-white">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]">
                 Create Task Column
               </span>
               <button
                 onClick={() => setTaskModalOpen(false)}
-                className="text-neutral-500 hover:text-white cursor-pointer"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -2009,7 +2283,7 @@ export default function App() {
 
             <form onSubmit={handleCreateTask} className="flex flex-col gap-4">
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                <label className="text-[9px] uppercase tracking-widest font-black text-[var(--text-secondary)] block mb-1.5">
                   Task Name (Max 16 chars)
                 </label>
                 <input
@@ -2020,29 +2294,29 @@ export default function App() {
                   placeholder="e.g. Mechanical Rig..."
                   value={taskForm.title}
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
+                  className="w-full bg-[var(--bg-card)] border border-[var(--border-panel)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                <label className="text-[9px] uppercase tracking-widest font-black text-[var(--text-secondary)] block mb-1.5">
                   Fluid Color
                 </label>
-                <div className="flex items-center gap-3 bg-[#141414] p-2 rounded-lg border border-white/10">
+                <div className="flex items-center gap-3 bg-[var(--bg-card)] p-2 rounded-lg border border-[var(--border-panel)]">
                   <input
                     type="color"
                     value={taskForm.hex}
                     onChange={(e) => setTaskForm({ ...taskForm, hex: e.target.value })}
                     className="w-9 h-9 rounded-full cursor-pointer bg-transparent border-none outline-none"
                   />
-                  <span className="text-xs font-mono uppercase text-white font-bold">
+                  <span className="text-xs font-mono uppercase text-[var(--text-primary)] font-bold">
                     {taskForm.hex}
                   </span>
                 </div>
               </div>
 
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                <label className="text-[9px] uppercase tracking-widest font-black text-[var(--text-secondary)] block mb-1.5">
                   Position Slot (1 to {activeTasks.length + 1})
                 </label>
                 <input
@@ -2051,7 +2325,7 @@ export default function App() {
                   max={activeTasks.length + 1}
                   value={taskForm.position}
                   onChange={(e) => setTaskForm({ ...taskForm, position: e.target.value })}
-                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
+                  className="w-full bg-[var(--bg-card)] border border-[var(--border-panel)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
                 />
               </div>
 
@@ -2059,13 +2333,13 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setTaskModalOpen(false)}
-                  className="flex-1 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-neutral-400 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                  className="flex-1 py-2 rounded-lg border border-[var(--border-panel)] hover:bg-white/5 text-[var(--text-secondary)] text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-lg bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                  className="flex-1 py-2 rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 text-[10px] font-black uppercase tracking-wider cursor-pointer"
                 >
                   Spawn Task
                 </button>
@@ -2078,14 +2352,14 @@ export default function App() {
       {/* 5E: HABIT MODAL */}
       {habitModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
+          <div className="w-full max-w-sm bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded-2xl shadow-2xl p-6 flex flex-col gap-5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black uppercase tracking-widest text-white">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]">
                 Create Habit Track
               </span>
               <button
                 onClick={() => setHabitModalOpen(false)}
-                className="text-neutral-500 hover:text-white cursor-pointer"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -2093,7 +2367,7 @@ export default function App() {
 
             <form onSubmit={handleCreateHabit} className="flex flex-col gap-4">
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                <label className="text-[9px] uppercase tracking-widest font-black text-[var(--text-secondary)] block mb-1.5">
                   Habit Label (Max 16 letters)
                 </label>
                 <input
@@ -2106,29 +2380,29 @@ export default function App() {
                   onChange={(e) =>
                     setHabitForm({ ...habitForm, label: e.target.value.toUpperCase() })
                   }
-                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white uppercase outline-none focus:border-white/30"
+                  className="w-full bg-[var(--bg-card)] border border-[var(--border-panel)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] uppercase outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                <label className="text-[9px] uppercase tracking-widest font-black text-[var(--text-secondary)] block mb-1.5">
                   Track Color
                 </label>
-                <div className="flex items-center gap-3 bg-[#141414] p-2 rounded-lg border border-white/10">
+                <div className="flex items-center gap-3 bg-[var(--bg-card)] p-2 rounded-lg border border-[var(--border-panel)]">
                   <input
                     type="color"
                     value={habitForm.hex}
                     onChange={(e) => setHabitForm({ ...habitForm, hex: e.target.value })}
                     className="w-9 h-9 rounded-full cursor-pointer bg-transparent border-none outline-none"
                   />
-                  <span className="text-xs font-mono uppercase text-white font-bold">
+                  <span className="text-xs font-mono uppercase text-[var(--text-primary)] font-bold">
                     {habitForm.hex}
                   </span>
                 </div>
               </div>
 
               <div>
-                <label className="text-[9px] uppercase tracking-widest font-black text-neutral-400 block mb-1.5">
+                <label className="text-[9px] uppercase tracking-widest font-black text-[var(--text-secondary)] block mb-1.5">
                   Position Slot (1 to {activeHabits.length + 1})
                 </label>
                 <input
@@ -2137,7 +2411,7 @@ export default function App() {
                   max={activeHabits.length + 1}
                   value={habitForm.position}
                   onChange={(e) => setHabitForm({ ...habitForm, position: e.target.value })}
-                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/30"
+                  className="w-full bg-[var(--bg-card)] border border-[var(--border-panel)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] outline-none"
                 />
               </div>
 
@@ -2145,13 +2419,13 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setHabitModalOpen(false)}
-                  className="flex-1 py-2 rounded-lg border border-white/10 hover:bg-white/5 text-neutral-400 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                  className="flex-1 py-2 rounded-lg border border-[var(--border-panel)] hover:bg-white/5 text-[var(--text-secondary)] text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-lg bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                  className="flex-1 py-2 rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 text-[10px] font-black uppercase tracking-wider cursor-pointer"
                 >
                   Spawn Habit
                 </button>
@@ -2164,17 +2438,17 @@ export default function App() {
       {/* 5F: NAME EVOLUTION HISTORY MODAL */}
       {historyModalTask && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+          <div className="w-full max-w-sm bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--border-panel)]">
               <div className="flex items-center gap-2">
-                <History size={14} className="text-amber-400" />
-                <span className="text-[11px] font-black uppercase tracking-widest text-white">
+                <History size={14} className="text-[var(--accent-sunday)]" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]">
                   {historyModalTask.title} — History
                 </span>
               </div>
               <button
                 onClick={() => setHistoryModalTask(null)}
-                className="text-neutral-500 hover:text-white cursor-pointer"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -2184,17 +2458,19 @@ export default function App() {
               {(historyModalTask.nameHistory || []).map((entry, i) => (
                 <div
                   key={i}
-                  className="flex justify-between items-center bg-[#141414] p-2.5 rounded-lg border border-white/5"
+                  className="flex justify-between items-center bg-[var(--bg-card)] p-2.5 rounded-lg border border-[var(--border-grid)]"
                 >
-                  <span className="text-xs font-bold text-white uppercase">{entry.title}</span>
-                  <span className="text-[9px] font-mono text-neutral-500">{entry.at}</span>
+                  <span className="text-xs font-bold text-[var(--text-primary)] uppercase">
+                    {entry.title}
+                  </span>
+                  <span className="text-[9px] font-mono text-[var(--text-muted)]">{entry.at}</span>
                 </div>
               ))}
             </div>
 
             <button
               onClick={() => setHistoryModalTask(null)}
-              className="w-full py-2 bg-white text-black font-black uppercase text-[10px] tracking-wider rounded-lg hover:bg-neutral-200 cursor-pointer"
+              className="w-full py-2 bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] font-black uppercase text-[10px] tracking-wider rounded-lg hover:opacity-90 cursor-pointer"
             >
               Close
             </button>
@@ -2205,32 +2481,38 @@ export default function App() {
       {/* 5G: SELECTIVE IMPORT INSPECTOR MODAL */}
       {importFilePayload && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+          <div className="w-full max-w-md bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--border-panel)]">
               <div>
-                <span className="text-xs font-black uppercase tracking-widest text-white block">
+                <span className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)] block">
                   Inspect & Restore Tracks
                 </span>
-                <span className="text-[10px] text-neutral-400">
+                <span className="text-[10px] text-[var(--text-secondary)]">
                   Select specific tasks to extract ({importFilePayload.habits?.length || 0} habits will merge automatically):
                 </span>
               </div>
               <button
                 onClick={() => setImportFilePayload(null)}
-                className="text-neutral-500 hover:text-white cursor-pointer"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 <X size={16} />
               </button>
             </div>
 
             {importFilePayload.habits?.length > 0 && (
-              <div className="flex items-center gap-1.5 p-2 rounded-lg bg-white/5 border border-white/10 overflow-x-auto text-[10px] font-mono">
-                <span className="text-neutral-400 uppercase text-[9px] font-bold">Habits in Backup:</span>
+              <div className="flex items-center gap-1.5 p-2 rounded-lg bg-white/5 border border-[var(--border-panel)] overflow-x-auto text-[10px] font-mono">
+                <span className="text-[var(--text-secondary)] uppercase text-[9px] font-bold">
+                  Habits in Backup:
+                </span>
                 {importFilePayload.habits.map((h, i) => (
                   <span
                     key={i}
                     className="px-2 py-0.5 rounded-full font-bold uppercase"
-                    style={{ backgroundColor: `${h.hex}25`, color: h.hex, border: `1px solid ${h.hex}60` }}
+                    style={{
+                      backgroundColor: `${h.hex}25`,
+                      color: h.hex,
+                      border: `1px solid ${h.hex}60`,
+                    }}
                   >
                     {h.label} ({Object.keys(h.data || {}).length}d)
                   </span>
@@ -2256,8 +2538,8 @@ export default function App() {
                     }}
                     className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-white/10 border-white/30 text-white'
-                        : 'bg-[#141414] border-white/5 text-neutral-500 hover:border-white/10'
+                        ? 'bg-white/10 border-white/30 text-[var(--text-primary)]'
+                        : 'bg-[var(--bg-card)] border-[var(--border-grid)] text-[var(--text-muted)]'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -2273,7 +2555,7 @@ export default function App() {
                       />
                       <span className="text-xs font-bold uppercase">{t.title}</span>
                     </div>
-                    <span className="text-[9px] font-mono text-neutral-400">
+                    <span className="text-[9px] font-mono text-[var(--text-secondary)]">
                       {loggedDays} Days
                     </span>
                   </div>
@@ -2281,14 +2563,14 @@ export default function App() {
               })}
             </div>
 
-            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
+            <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-panel)]">
               <button
                 disabled={selectedImportTaskIds.size === 0}
                 onClick={() => handleExecuteSelectiveImport('active')}
                 className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
                   selectedImportTaskIds.size === 0
-                    ? 'bg-white/5 text-white/20 cursor-default'
-                    : 'bg-white text-black hover:bg-neutral-200 cursor-pointer'
+                    ? 'bg-white/5 text-[var(--text-muted)] cursor-default'
+                    : 'bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 cursor-pointer'
                 }`}
               >
                 Restore Selected Tasks + Habits ({selectedImportTaskIds.size})
@@ -2299,8 +2581,8 @@ export default function App() {
                 onClick={() => handleExecuteSelectiveImport('vault')}
                 className={`w-full py-2 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-colors border ${
                   selectedImportTaskIds.size === 0
-                    ? 'border-white/5 text-white/20 cursor-default'
-                    : 'border-amber-400/40 text-amber-400 hover:bg-amber-400/10 cursor-pointer'
+                    ? 'border-[var(--border-grid)] text-[var(--text-muted)] cursor-default'
+                    : 'border-amber-400/40 text-[var(--accent-sunday)] hover:bg-amber-400/10 cursor-pointer'
                 }`}
               >
                 Send Tasks to Vault + Merge Habits
@@ -2313,17 +2595,17 @@ export default function App() {
       {/* 5H: BOARD SNAPSHOTS & ROLLBACK MODAL */}
       {revisionsModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#0d0d0d] border border-white/15 rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+          <div className="w-full max-w-md bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--border-panel)]">
               <div className="flex items-center gap-2">
                 <Layers size={14} className="text-cyan-400" />
-                <span className="text-[11px] font-black uppercase tracking-widest text-white">
+                <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text-primary)]">
                   Board Snapshots
                 </span>
               </div>
               <button
                 onClick={() => setRevisionsModalOpen(false)}
-                className="text-neutral-500 hover:text-white cursor-pointer"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -2331,18 +2613,20 @@ export default function App() {
 
             <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
               {revisions.length === 0 ? (
-                <div className="text-center py-8 text-neutral-600 text-xs">
+                <div className="text-center py-8 text-[var(--text-muted)] text-xs">
                   No previous snapshots stored.
                 </div>
               ) : (
                 revisions.map((rev) => (
                   <div
                     key={rev.id}
-                    className="flex items-center justify-between p-2.5 rounded-lg bg-[#141414] border border-white/5"
+                    className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-grid)]"
                   >
                     <div>
-                      <div className="text-xs font-bold text-white">{rev.reason}</div>
-                      <div className="text-[9px] text-neutral-500">
+                      <div className="text-xs font-bold text-[var(--text-primary)]">
+                        {rev.reason}
+                      </div>
+                      <div className="text-[9px] text-[var(--text-muted)]">
                         {rev.at} · {rev.tasks?.length || 0} Tasks
                       </div>
                     </div>
@@ -2353,7 +2637,7 @@ export default function App() {
                         setHabits(rev.habits.map(validateAndNormalizeHabit));
                         setRevisionsModalOpen(false);
                       }}
-                      className="px-2.5 py-1 bg-white text-black hover:bg-neutral-200 text-[9px] font-black uppercase tracking-wider rounded cursor-pointer"
+                      className="px-2.5 py-1 bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 text-[9px] font-black uppercase tracking-wider rounded cursor-pointer"
                     >
                       Restore
                     </button>
@@ -2364,7 +2648,7 @@ export default function App() {
 
             <button
               onClick={() => setRevisionsModalOpen(false)}
-              className="w-full py-2 bg-white/5 hover:bg-white/10 text-neutral-300 font-bold uppercase text-[10px] rounded-lg cursor-pointer"
+              className="w-full py-2 bg-white/5 hover:bg-white/10 text-[var(--text-secondary)] font-bold uppercase text-[10px] rounded-lg cursor-pointer"
             >
               Close
             </button>
@@ -2375,30 +2659,30 @@ export default function App() {
       {/* 5I: ARCHIVE VAULT DRAWER */}
       {vaultOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end">
-          <div className="w-full max-w-md bg-[#0a0a0a] border-l border-white/10 h-full p-6 flex flex-col justify-between shadow-2xl">
+          <div className="w-full max-w-md bg-[var(--bg-panel)] border-l border-[var(--border-panel)] h-full p-6 flex flex-col justify-between shadow-2xl">
             <div>
-              <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center justify-between pb-4 border-b border-[var(--border-panel)]">
                 <div className="flex items-center gap-2">
-                  <Archive size={16} className="text-amber-400" />
-                  <span className="text-xs font-black uppercase tracking-widest text-white">
+                  <Archive size={16} className="text-[var(--accent-sunday)]" />
+                  <span className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)]">
                     Task Archive Vault
                   </span>
                 </div>
                 <button
                   onClick={() => setVaultOpen(false)}
-                  className="text-neutral-500 hover:text-white cursor-pointer"
+                  className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
                 >
                   <X size={16} />
                 </button>
               </div>
 
               <div className="mt-6 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-210px)] pr-2">
-                <div className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider font-bold">
+                <div className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-wider font-bold">
                   Archived Tasks ({archivedTasks.length})
                 </div>
 
                 {archivedTasks.length === 0 ? (
-                  <div className="text-center py-6 text-neutral-600 text-xs tracking-wider uppercase font-bold bg-[#101010] rounded-xl border border-white/5">
+                  <div className="text-center py-6 text-[var(--text-muted)] text-xs tracking-wider uppercase font-bold bg-[var(--bg-card)] rounded-xl border border-[var(--border-grid)]">
                     No archived tasks in the vault.
                   </div>
                 ) : (
@@ -2409,7 +2693,7 @@ export default function App() {
                     return (
                       <div
                         key={t.id}
-                        className="bg-[#121212] border border-white/10 rounded-xl p-4 flex flex-col gap-3"
+                        className="bg-[var(--bg-card)] border border-[var(--border-panel)] rounded-xl p-4 flex flex-col gap-3"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
@@ -2417,32 +2701,32 @@ export default function App() {
                               className="w-3 h-3 rounded-full"
                               style={{ backgroundColor: t.hex }}
                             />
-                            <span className="text-xs font-black text-white uppercase">
+                            <span className="text-xs font-black text-[var(--text-primary)] uppercase">
                               {t.title}
                             </span>
                           </div>
-                          <span className="text-[10px] text-neutral-500 font-bold">
+                          <span className="text-[10px] text-[var(--text-muted)] font-bold">
                             {loggedDays} Days Total
                           </span>
                         </div>
 
                         {history.length > 1 && (
-                          <div className="bg-black/40 p-2 rounded text-[9px] text-neutral-400 flex flex-col gap-1">
-                            <span className="font-bold text-neutral-500 flex items-center gap-1">
+                          <div className="bg-black/40 p-2 rounded text-[9px] text-[var(--text-secondary)] flex flex-col gap-1">
+                            <span className="font-bold text-[var(--text-muted)] flex items-center gap-1">
                               <History size={10} /> Name History:
                             </span>
                             {history.map((h, hIdx) => (
-                              <span key={hIdx} className="pl-3 border-l border-white/10">
-                                • {h.title} <span className="text-neutral-600">({h.at})</span>
+                              <span key={hIdx} className="pl-3 border-l border-[var(--border-panel)]">
+                                • {h.title} <span className="text-[var(--text-muted)]">({h.at})</span>
                               </span>
                             ))}
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                        <div className="flex items-center justify-between pt-2 border-t border-[var(--border-grid)]">
                           <button
                             onClick={() => handleRestoreTask(t.id)}
-                            className="flex items-center gap-1.5 px-3 py-1 rounded bg-white text-black hover:bg-neutral-200 text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-1 rounded bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 text-[10px] font-black uppercase tracking-wider transition-opacity cursor-pointer"
                           >
                             <RefreshCw size={11} />
                             <span>Respawn</span>
@@ -2471,7 +2755,7 @@ export default function App() {
                               </button>
                               <button
                                 onClick={() => setPurgeConfirmId(null)}
-                                className="text-neutral-500 hover:text-white text-xs cursor-pointer"
+                                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs cursor-pointer"
                               >
                                 <X size={12} />
                               </button>
@@ -2493,24 +2777,25 @@ export default function App() {
                   })
                 )}
 
-                {/* ARCHIVED HABITS */}
                 {archivedHabits && archivedHabits.length > 0 && (
-                  <div className="pt-4 border-t border-white/10 flex flex-col gap-3">
-                    <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider font-bold">
+                  <div className="pt-4 border-t border-[var(--border-panel)] flex flex-col gap-3">
+                    <span className="text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-wider font-bold">
                       Archived Habits ({archivedHabits.length})
                     </span>
                     {archivedHabits.map((h) => (
                       <div
                         key={h.id}
-                        className="bg-[#121212] border border-white/10 rounded-xl p-3 flex items-center justify-between"
+                        className="bg-[var(--bg-card)] border border-[var(--border-panel)] rounded-xl p-3 flex items-center justify-between"
                       >
                         <div className="flex items-center gap-2">
                           <span
                             className="w-2.5 h-2.5 rounded-full"
                             style={{ backgroundColor: h.hex }}
                           />
-                          <span className="text-xs font-bold uppercase text-white">{h.label}</span>
-                          <span className="text-[9px] text-neutral-500 font-mono">
+                          <span className="text-xs font-bold uppercase text-[var(--text-primary)]">
+                            {h.label}
+                          </span>
+                          <span className="text-[9px] text-[var(--text-muted)] font-mono">
                             ({Object.keys(h.data || {}).length}d logged)
                           </span>
                         </div>
@@ -2524,7 +2809,7 @@ export default function App() {
                                 )
                               );
                             }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-white text-black text-[9px] font-black uppercase cursor-pointer hover:bg-neutral-200"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] text-[9px] font-black uppercase cursor-pointer hover:opacity-90"
                           >
                             <RefreshCw size={10} />
                             <span>Respawn</span>
@@ -2547,7 +2832,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-white/10 text-[9px] text-neutral-500 leading-relaxed">
+            <div className="pt-4 border-t border-[var(--border-panel)] text-[9px] text-[var(--text-muted)] leading-relaxed">
               Vaulted tasks and habits keep 100% of their historical days intact. Respawning
               restores them to the active timeline without overwriting existing lanes.
             </div>
@@ -2559,7 +2844,7 @@ export default function App() {
 }
 
 // ============================================================================
-// SUB-COMPONENT: SPRINT-LINKED NOTES DRAWER
+// SUB-COMPONENT: SPRINT-LINKED NOTES DRAWER (CHRONOLOGICAL TOP-TO-BOTTOM)
 // ============================================================================
 
 function SprintNotesDrawer({
@@ -2576,11 +2861,21 @@ function SprintNotesDrawer({
   const [activeDrafts, setActiveDrafts] = useState({});
   const [editingLogId, setEditingLogId] = useState(null);
   const [editText, setEditText] = useState('');
+  const drawerScrollRef = useRef(null);
+  const latestCardRef = useRef(null);
 
+  // 4. Chronological Top-to-Bottom Order (oldest at top, latest at bottom)
   const sprintBlocks = useMemo(() => {
     const { blocks } = parseTaskSprintsAndStreak(task, timelineDays, todayIso);
-    return [...blocks].reverse();
+    return blocks;
   }, [task, timelineDays, todayIso]);
+
+  // Auto-scroll to latest sprint card on drawer open
+  useEffect(() => {
+    if (latestCardRef.current) {
+      latestCardRef.current.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }
+  }, [task.id]);
 
   const toggleCollapse = (key) => {
     setCollapsedCards((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -2595,8 +2890,8 @@ function SprintNotesDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs select-none">
-      <div className="w-full max-w-lg bg-[#070707] border-l border-white/10 h-full flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-[#0d0d0d]">
+      <div className="w-full max-w-lg bg-[var(--bg-panel)] border-l border-[var(--border-panel)] h-full flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-panel)] bg-[var(--bg-header)]">
           <div className="flex items-center gap-2.5">
             <span
               className="w-3.5 h-3.5 rounded-full"
@@ -2604,14 +2899,14 @@ function SprintNotesDrawer({
             />
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xs font-mono font-black uppercase tracking-wider text-white">
+                <h2 className="text-xs font-mono font-black uppercase tracking-wider text-[var(--text-primary)]">
                   {task.title}
                 </h2>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-neutral-300 uppercase font-bold">
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-[var(--text-secondary)] uppercase font-bold">
                   Sprint Notes
                 </span>
               </div>
-              <span className="text-[10px] font-mono text-neutral-500">
+              <span className="text-[10px] font-mono text-[var(--text-muted)]">
                 {sprintBlocks.length} Contiguous {sprintBlocks.length === 1 ? 'Sprint' : 'Sprints'}
               </span>
             </div>
@@ -2619,43 +2914,46 @@ function SprintNotesDrawer({
 
           <button
             onClick={onClose}
-            className="text-neutral-500 hover:text-white p-1 cursor-pointer"
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 cursor-pointer"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* pb-[45vh] gives empty space below the latest sprint card */}
+        <div ref={drawerScrollRef} className="flex-1 overflow-y-auto p-4 pb-[45vh] space-y-3">
           {sprintBlocks.length === 0 ? (
-            <div className="text-center py-20 text-neutral-600 font-mono text-xs space-y-2">
-              <Calendar size={24} className="mx-auto text-neutral-700" />
+            <div className="text-center py-20 text-[var(--text-muted)] font-mono text-xs space-y-2">
+              <Calendar size={24} className="mx-auto opacity-50" />
               <div>No activity sprints logged yet for this task channel.</div>
-              <div className="text-[10px] text-neutral-700">
+              <div className="text-[10px]">
                 Start Today or backfill past days to generate sprint note cards.
               </div>
             </div>
           ) : (
-            sprintBlocks.map((blk) => {
+            sprintBlocks.map((blk, idx) => {
               const sprintKey = blk.key;
+              const isLatest = idx === sprintBlocks.length - 1;
               const isCollapsed = Boolean(collapsedCards[sprintKey]);
               const sprintNotes = task.notes?.[sprintKey] || { logs: [], pending: '' };
 
               return (
                 <div
                   key={sprintKey}
-                  className="w-full bg-[#0e0e0e] border border-white/10 hover:border-white/20 rounded-xl overflow-hidden shadow-lg transition"
+                  ref={isLatest ? latestCardRef : null}
+                  className="w-full bg-[var(--bg-card)] border border-[var(--border-panel)] rounded-xl overflow-hidden shadow-lg transition"
                 >
                   <div
                     onClick={() => toggleCollapse(sprintKey)}
-                    className="px-4 py-3 bg-[#141414] border-b border-white/5 flex items-center justify-between cursor-pointer hover:bg-[#191919] transition"
+                    className="px-4 py-3 bg-[var(--bg-header)] border-b border-[var(--border-grid)] flex items-center justify-between cursor-pointer hover:opacity-90 transition"
                   >
                     <div className="flex items-center gap-2">
                       {isCollapsed ? (
-                        <ChevronRight size={14} className="text-neutral-500" />
+                        <ChevronRight size={14} className="text-[var(--text-muted)]" />
                       ) : (
-                        <ChevronDown size={14} className="text-neutral-500" />
+                        <ChevronDown size={14} className="text-[var(--text-muted)]" />
                       )}
-                      <span className="text-xs font-mono font-bold text-neutral-200">
+                      <span className="text-xs font-mono font-bold text-[var(--text-primary)]">
                         {blk.firstDayName} {blk.startDateStr}
                         {blk.startIso !== blk.endIso &&
                           ` – ${blk.lastDayName} ${blk.endDateStr}`}
@@ -2667,7 +2965,7 @@ function SprintNotesDrawer({
                         {blk.daysCount}d Sprint
                       </span>
                     </div>
-                    <span className="text-[10px] font-mono text-neutral-500">
+                    <span className="text-[10px] font-mono text-[var(--text-muted)]">
                       {sprintNotes.logs?.length || 0}{' '}
                       {sprintNotes.logs?.length === 1 ? 'entry' : 'entries'}
                     </span>
@@ -2691,14 +2989,12 @@ function SprintNotesDrawer({
                           return (
                             <div
                               key={log.id}
-                              className="p-3 bg-[#141414] border border-white/5 rounded-lg group hover:border-white/15 transition space-y-2"
+                              className="p-3 bg-[var(--bg-panel)] border border-[var(--border-grid)] rounded-lg group hover:border-[var(--border-panel)] transition space-y-2"
                             >
-                              <div className="flex items-center justify-between text-[10px] font-mono text-neutral-500">
+                              <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-muted)]">
                                 <span className="flex items-center gap-1">
                                   <Clock size={10} /> {dateStr} at {timeStr}
-                                  {log.editedAt && (
-                                    <span className="text-neutral-600">(edited)</span>
-                                  )}
+                                  {log.editedAt && <span>(edited)</span>}
                                 </span>
 
                                 {!isEditingThis && (
@@ -2709,14 +3005,14 @@ function SprintNotesDrawer({
                                         setEditText(log.text);
                                       }}
                                       title="Edit Note"
-                                      className="text-neutral-500 hover:text-white cursor-pointer"
+                                      className="text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer"
                                     >
                                       <Edit2 size={11} />
                                     </button>
                                     <button
                                       onClick={() => onDeleteLog(task.id, sprintKey, log.id)}
                                       title="Delete Note"
-                                      className="text-neutral-500 hover:text-red-400 cursor-pointer"
+                                      className="text-[var(--text-muted)] hover:text-red-400 cursor-pointer"
                                     >
                                       <Trash2 size={11} />
                                     </button>
@@ -2731,7 +3027,7 @@ function SprintNotesDrawer({
                                     onChange={(e) => setEditText(e.target.value)}
                                     rows={3}
                                     autoFocus
-                                    className="w-full bg-[#0a0a0a] border border-white/20 focus:border-white/40 rounded p-2 text-xs font-mono text-white outline-none resize-none leading-relaxed"
+                                    className="w-full bg-[var(--bg-canvas)] border border-[var(--border-panel)] rounded p-2 text-xs font-mono text-[var(--text-primary)] outline-none resize-none leading-relaxed"
                                   />
                                   <div className="flex justify-end gap-1.5">
                                     <button
@@ -2739,7 +3035,7 @@ function SprintNotesDrawer({
                                         setEditingLogId(null);
                                         setEditText('');
                                       }}
-                                      className="px-2 py-1 rounded text-[10px] font-mono text-neutral-400 hover:text-white cursor-pointer"
+                                      className="px-2 py-1 rounded text-[10px] font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
                                     >
                                       CANCEL
                                     </button>
@@ -2750,7 +3046,7 @@ function SprintNotesDrawer({
                                         setEditingLogId(null);
                                         setEditText('');
                                       }}
-                                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-white text-black font-mono font-black text-[10px] cursor-pointer"
+                                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] font-mono font-black text-[10px] cursor-pointer"
                                     >
                                       <Check size={11} />
                                       <span>SAVE</span>
@@ -2758,7 +3054,7 @@ function SprintNotesDrawer({
                                   </div>
                                 </div>
                               ) : (
-                                <div className="text-xs font-mono text-neutral-200 whitespace-pre-wrap leading-relaxed">
+                                <div className="text-xs font-mono text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
                                   {log.text}
                                 </div>
                               )}
@@ -2778,13 +3074,13 @@ function SprintNotesDrawer({
                           }
                           placeholder="Log what you accomplished or where you left off..."
                           rows={3}
-                          className="w-full bg-[#141414] border border-white/10 focus:border-white/30 rounded-lg p-2.5 text-xs font-mono text-white placeholder-neutral-600 outline-none resize-none leading-relaxed"
+                          className="w-full bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded-lg p-2.5 text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none resize-none leading-relaxed"
                         />
                         <div className="flex justify-end">
                           <button
                             onClick={() => handlePostNote(sprintKey)}
                             disabled={!(activeDrafts[sprintKey] || '').trim()}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-neutral-200 text-black font-mono font-black text-[10px] uppercase tracking-wider disabled:opacity-30 transition cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--action-primary-bg)] text-[var(--action-primary-text)] hover:opacity-90 font-mono font-black text-[10px] uppercase tracking-wider disabled:opacity-30 transition cursor-pointer"
                           >
                             <Send size={11} />
                             <span>Post Note</span>
@@ -2792,8 +3088,8 @@ function SprintNotesDrawer({
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-white/5 space-y-1.5">
-                        <span className="text-[9px] font-mono font-bold text-neutral-500 uppercase tracking-wider block">
+                      <div className="pt-2 border-t border-[var(--border-grid)] space-y-1.5">
+                        <span className="text-[9px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider block">
                           Pending / Next Up:
                         </span>
                         <input
@@ -2803,7 +3099,7 @@ function SprintNotesDrawer({
                             onUpdatePending(task.id, sprintKey, e.target.value)
                           }
                           placeholder="e.g. Next milestone, fix rig weights..."
-                          className="w-full bg-[#121212] border border-white/10 focus:border-white/30 rounded px-2.5 py-1.5 text-xs font-mono text-neutral-200 placeholder-neutral-700 outline-none"
+                          className="w-full bg-[var(--bg-panel)] border border-[var(--border-panel)] rounded px-2.5 py-1.5 text-xs font-mono text-[var(--text-primary)] placeholder-[var(--text-muted)] outline-none"
                         />
                       </div>
                     </div>
