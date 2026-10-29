@@ -148,6 +148,36 @@ export function validateAndNormalizeTask(t) {
     throw new Error(`Corrupt Task Record: "matrix" for task "${t.title}" must be a date-keyed object map.`);
   }
 
+  // --- MIGRATION: Permanently consolidate legacy note keys into sprint_YYYY-MM-DD ---
+  const rawNotes = t.notes && typeof t.notes === 'object' && !Array.isArray(t.notes) ? t.notes : {};
+  const migratedNotes = {};
+
+  Object.entries(rawNotes).forEach(([key, noteObj]) => {
+    if (!noteObj || typeof noteObj !== 'object') return;
+    
+    // Extract the start date (e.g., from "2026-10-27_2026-10-28" or "sprint_2026-10-27")
+    const match = key.match(/\d{4}-\d{2}-\d{2}/);
+    const stableKey = match ? `sprint_${match[0]}` : key;
+
+    if (!migratedNotes[stableKey]) {
+      migratedNotes[stableKey] = { logs: [], pending: '' };
+    }
+
+    // Merge logs and deduplicate by log id
+    const existingLogIds = new Set(migratedNotes[stableKey].logs.map((l) => l.id));
+    (noteObj.logs || []).forEach((log) => {
+      if (log && log.id && !existingLogIds.has(log.id)) {
+        migratedNotes[stableKey].logs.push(log);
+        existingLogIds.add(log.id);
+      }
+    });
+
+    // Preserve the latest pending text if present
+    if (noteObj.pending && noteObj.pending.trim()) {
+      migratedNotes[stableKey].pending = noteObj.pending.trim();
+    }
+  });
+
   return {
     id: t.id,
     title: t.title.trim().substring(0, 16),
@@ -157,7 +187,7 @@ export function validateAndNormalizeTask(t) {
       ? t.nameHistory
       : [{ title: t.title.trim(), at: formatISODate(new Date()) }],
     matrix: t.matrix ? { ...t.matrix } : {},
-    notes: t.notes && typeof t.notes === 'object' && !Array.isArray(t.notes) ? { ...t.notes } : {},
+    notes: migratedNotes,
   };
 }
 
@@ -313,7 +343,7 @@ export function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
         const first = blockDays[0];
         const last = blockDays[blockDays.length - 1];
         blocks.push({
-          key: `${first.isoDate}_${last.isoDate}`,
+          key: `sprint_${first.isoDate}`,
           startIdx: blockStart,
           daysCount: blockDays.length,
           startIso: first.isoDate,
@@ -335,7 +365,7 @@ export function parseTaskSprintsAndStreak(task, timelineDays, todayIso) {
     const first = blockDays[0];
     const last = blockDays[blockDays.length - 1];
     blocks.push({
-      key: `${first.isoDate}_${last.isoDate}`,
+      key: `sprint_${first.isoDate}`,
       startIdx: blockStart,
       daysCount: blockDays.length,
       startIso: first.isoDate,
@@ -3010,7 +3040,11 @@ function SprintNotesDrawer({
                                       <Edit2 size={11} />
                                     </button>
                                     <button
-                                      onClick={() => onDeleteLog(task.id, sprintKey, log.id)}
+                                      onClick={() => {
+                                        if (window.confirm("Permanently delete this sprint note?")) {
+                                          onDeleteLog(task.id, sprintKey, log.id);
+                                        }
+                                      }}
                                       title="Delete Note"
                                       className="text-[var(--text-muted)] hover:text-red-400 cursor-pointer"
                                     >
