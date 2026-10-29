@@ -2895,9 +2895,63 @@ function SprintNotesDrawer({
   const latestCardRef = useRef(null);
 
   // 4. Chronological Top-to-Bottom Order (oldest at top, latest at bottom)
+  // Unified Note Streams: merges matrix sprints, orphaned notes, and a today idea buffer
   const sprintBlocks = useMemo(() => {
-    const { blocks } = parseTaskSprintsAndStreak(task, timelineDays, todayIso);
-    return blocks;
+    // 1. Matrix blocks
+    const { blocks: matrixBlocks } = parseTaskSprintsAndStreak(task, timelineDays, todayIso);
+    const blockMap = new Map();
+
+    matrixBlocks.forEach((b) => {
+      blockMap.set(b.key, b);
+    });
+
+    // 2. Discover notes that exist in task.notes even if streak was undone
+    Object.keys(task.notes || {}).forEach((key) => {
+      if (blockMap.has(key)) return;
+      const noteData = task.notes[key];
+      const hasContent = (noteData.logs && noteData.logs.length > 0) || Boolean(noteData.pending?.trim());
+      if (!hasContent) return;
+
+      const dateMatch = key.match(/\d{4}-\d{2}-\d{2}/);
+      const startIso = dateMatch ? dateMatch[0] : todayIso;
+      const dayEntry = timelineDays.find((d) => d.isoDate === startIso);
+
+      blockMap.set(key, {
+        key,
+        startIdx: dayEntry ? dayEntry.dayIndex : 0,
+        daysCount: 0, // Standalone note card (no active sprint matrix)
+        startIso,
+        endIso: startIso,
+        firstDayName: dayEntry ? dayEntry.dayName : 'LOG',
+        lastDayName: dayEntry ? dayEntry.dayName : 'LOG',
+        startDateStr: dayEntry ? dayEntry.dateStr : startIso.slice(5).replace('-', '/'),
+        endDateStr: dayEntry ? dayEntry.dateStr : startIso.slice(5).replace('-', '/'),
+        isActive: false,
+        isIdeaOnly: true,
+      });
+    });
+
+    // 3. Always ensure a card exists for Today so you can log ideas anytime without starting a sprint
+    const todayKey = `sprint_${todayIso}`;
+    if (!blockMap.has(todayKey)) {
+      const todayEntry = timelineDays.find((d) => d.isoDate === todayIso);
+      blockMap.set(todayKey, {
+        key: todayKey,
+        startIdx: todayEntry ? todayEntry.dayIndex : 9999,
+        daysCount: 0,
+        startIso: todayIso,
+        endIso: todayIso,
+        firstDayName: todayEntry ? todayEntry.dayName : 'TODAY',
+        lastDayName: todayEntry ? todayEntry.dayName : 'TODAY',
+        startDateStr: todayEntry ? todayEntry.dateStr : todayIso.slice(5).replace('-', '/'),
+        endDateStr: todayEntry ? todayEntry.dateStr : todayIso.slice(5).replace('-', '/'),
+        isActive: false,
+        isTodayDraft: true,
+      });
+    }
+
+    // Sort strictly chronological by startIso
+    return Array.from(blockMap.values()).sort((a, b) => a.startIso.localeCompare(b.startIso));
   }, [task, timelineDays, todayIso]);
 
   // Auto-scroll to latest sprint card on drawer open
